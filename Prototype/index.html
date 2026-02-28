@@ -1,0 +1,370 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hemo-Connect - Blood Request Portal</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- SCREEN 1 : SEARCH FORM -->
+  <div id="searchScreen" class="page">
+    <div class="topbar">
+      <div class="topbar-left">
+        <span class="site-name">Hemo-Connect</span>
+        <span class="site-tagline">Blood Request Portal</span>
+      </div>
+      <div class="topbar-right">
+        <button class="btn-secondary" onclick="openOtpPopup()">Sign In</button>
+      </div>
+    </div>
+    <div class="page-body">
+      <div class="page-title">Find Blood Banks</div>
+
+      <div class="form-section">
+        <div class="form-section-heading">Patient Details</div>
+        <div class="form-row">
+          <div class="form-field">
+            <label for="patientName">Patient Name</label>
+            <input id="patientName" type="text" />
+          </div>
+        </div>
+        <div class="form-row two-col">
+          <div class="form-field">
+            <label for="bloodGroup">Blood Group</label>
+            <select id="bloodGroup">
+              <option value="">-- Select --</option>
+              <option value="A+">A+ (A Positive)</option>
+              <option value="A-">A- (A Negative)</option>
+              <option value="B+" selected>B+ (B Positive)</option>
+              <option value="B-">B- (B Negative)</option>
+              <option value="AB+">AB+ (AB Positive)</option>
+              <option value="AB-">AB- (AB Negative)</option>
+              <option value="O+">O+ (O Positive)</option>
+              <option value="O-">O- (O Negative)</option>
+            </select>
+          </div>
+          <div class="form-field">
+            <label for="bloodComponent">Blood Component</label>
+            <select id="bloodComponent">
+              <option value="">-- Select --</option>
+              <option value="Whole Blood" selected>Whole Blood</option>
+              <option value="Packed RBC">Packed RBC</option>
+              <option value="Fresh Frozen Plasma">Fresh Frozen Plasma (FFP)</option>
+              <option value="Platelet Concentrate">Platelet Concentrate</option>
+              <option value="Plasma">Plasma</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="form-section">
+        <div class="form-section-heading">Hospital Details</div>
+        <div class="form-row">
+          <div class="form-field">
+            <label for="hospitalName">Hospital Name &amp; Address</label>
+            <input id="hospitalName" type="text" />
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-field half">
+            <label for="hospitalPincode">Hospital Pincode</label>
+            <input id="hospitalPincode" type="text" maxlength="6" />
+            <div id="pincodeConfirm" class="pincode-confirm hidden">
+              Searching near pincode <strong id="pincodeConfirmVal"></strong>.
+              <button type="button" class="btn-link" onclick="showScreen('searchScreen')">Change</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="form-actions">
+        <button class="btn-primary" onclick="initiateSearch()">Search Blood Banks</button>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- SCREEN 2 : RESULTS -->
+  <div id="resultsScreen" class="page hidden">
+    <div class="topbar">
+      <div class="topbar-left">
+        <button class="btn-back" onclick="goBackToForm()">Back</button>
+        <span class="site-name">Hemo-Connect</span>
+      </div>
+    </div>
+    <div class="page-body">
+
+      <div class="results-controls-bar">
+        <div class="results-controls-left">
+          <label for="showResultsSelect">Show:</label>
+          <select id="showResultsSelect">
+            <option value="10" selected>Nearest 10</option>
+            <option value="20">Nearest 20</option>
+            <option value="all">All</option>
+          </select>
+        </div>
+        <div class="results-controls-right">
+          <label for="radiusSelect">Radius:</label>
+          <select id="radiusSelect">
+            <option value="5" selected>Within 5 km</option>
+            <option value="10">Within 10 km</option>
+            <option value="20">Within 20 km</option>
+            <option value="50">Within 50 km</option>
+            <option value="50+">Greater than 50 km</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- B+ results -->
+      <div id="bloodBankResults">
+        <p class="results-meta">Showing 4 blood banks near pincode <strong id="resultsPin">560001</strong></p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Blood Bank Name</th>
+                <th>Category</th>
+                <th>Distance</th>
+                <th>Address</th>
+                <th>Contact</th>
+                <th>Available Units</th>
+                <th>Last Updated</th>
+              </tr>
+            </thead>
+            <tbody id="bbTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- No results (AB-) -->
+      <div id="noResults" class="hidden">
+        <div class="no-results-box">
+          <div class="no-results-heading">No Results Found</div>
+          <p>No blood banks with <strong id="noResultsGroup">AB-</strong> stock were found within the selected radius near pincode <strong id="noResultsPin">560001</strong>.</p>
+          <p class="hint">Try expanding the search radius using the dropdown above.</p>
+        </div>
+      </div>
+
+      <!-- Donor CTA - always shown -->
+      <div class="donor-cta-block">
+        <hr />
+        <button class="btn-donor-cta" onclick="openOtpPopup()">Search For Donors Directly</button>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- SCREEN 3 : DASHBOARD -->
+  <div id="dashboardScreen" class="page hidden">
+    <div class="topbar">
+      <div class="topbar-left">
+        <span class="site-name">Hemo-Connect</span>
+      </div>
+      <div class="topbar-right">
+        <span id="dashUserBadge" class="user-badge">+91 98765 43210</span>
+      </div>
+    </div>
+    <div class="page-body">
+      <div class="page-title" id="dashGreeting">Hello</div>
+
+
+      <div id="dashHomeView">
+        <div class="action-block" onclick="openRequestBloodPopup()">
+          <div class="action-block-title">A. Request Blood</div>
+          <div class="action-block-desc">Send an alert to nearby verified donors matching your blood type and component.</div>
+        </div>
+
+        <div class="action-block" onclick="showDonorsView()">
+          <div class="action-block-title">B. Donors Who Responded</div>
+          <div class="action-block-desc">View donors who confirmed availability and shared their contact details.</div>
+        </div>
+
+        <div class="action-block" onclick="showHistoryView()">
+          <div class="action-block-title">C. Request History</div>
+          <div class="action-block-desc">See all blood requests you have raised and their current status.</div>
+        </div>
+      </div>
+
+      <!-- B) Donors View -->
+      <div id="dashDonorsView" class="hidden">
+        <div class="sub-header">
+          <button class="btn-back" onclick="showDashHome()">Back</button>
+          <span class="sub-title">B. Donors Who Responded</span>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Request ID</th>
+                <th>Donor Name</th>
+                <th>Donor Contact</th>
+                <th>Distance</th>
+              </tr>
+            </thead>
+            <tbody id="donorTableBody">
+              <tr>
+                <td>REQ-001</td>
+                <td>Priya Sharma</td>
+                <td>+91 91234 56789</td>
+                <td>1.8 km</td>
+              </tr>
+              <tr>
+                <td>REQ-001</td>
+                <td>Arjun Mehta</td>
+                <td>+91 78901 23456</td>
+                <td>3.2 km</td>
+              </tr>
+              <tr>
+                <td>REQ-001</td>
+                <td>Snehal Banerjee</td>
+                <td>+91 85639 12745</td>
+                <td>5.1 km</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- C) History View -->
+      <div id="dashHistoryView" class="hidden">
+        <div class="sub-header">
+          <button class="btn-back" onclick="showDashHome()">Back</button>
+          <span class="sub-title">C. Request History</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Request ID</th>
+                <th>Blood Group / Component</th>
+                <th>Created</th>
+                <th>Responses</th>
+                <th>Status</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="historyTableBody">
+              <tr>
+                <td><strong>REQ-001</strong></td>
+                <td id="histBloodGroup">B+ / Whole Blood</td>
+                <td>28 Feb 2026, 09:15 AM</td>
+                <td>3 donors confirmed</td>
+                <td>Active</td>
+                <td class="muted">--</td>
+              </tr>
+              <tr>
+                <td><strong>REQ-002</strong></td>
+                <td id="histBloodGroup2">B+ / Platelet Concentrate</td>
+                <td>28 Feb 2026, 07:40 AM</td>
+                <td>0 responses</td>
+                <td>No Response</td>
+                <td>
+                  <button class="btn-sm" onclick="openRequestBloodPopup()">Request More Donors</button>
+                  <div class="hint">Available - no responses after 1 hr</div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+
+
+  <!-- POPUP: OTP VERIFICATION -->
+  <div id="otpPopup" class="modal-overlay hidden">
+    <div class="modal">
+      <div class="modal-heading">Verify Your Mobile Number</div>
+      <div id="otpStep1" style="margin-top: 16px;">
+        <div class="form-field">
+          <label for="mobileInput">Mobile Number</label>
+          <div class="mobile-input-row">
+            <span class="country-prefix">+91</span>
+            <input id="mobileInput" type="tel" maxlength="10" />
+          </div>
+        </div>
+        <div class="modal-actions" style="margin-top: 14px;">
+          <button class="btn-secondary" onclick="closeAllPopups()">Cancel</button>
+          <button class="btn-primary" onclick="sendOTP()">Send OTP</button>
+        </div>
+      </div>
+      <div id="otpStep2" class="hidden" style="margin-top: 16px;">
+        <div class="otp-sent-notice">OTP sent to <strong id="otpSentTo">+91 XXXXXXXXXX</strong></div>
+        <div class="form-field" style="margin-top: 12px;">
+          <label for="otpInput">Enter OTP</label>
+          <input id="otpInput" type="text" maxlength="6" class="otp-input" />
+        </div>
+        <div class="modal-actions" style="margin-top: 14px;">
+          <button class="btn-secondary" onclick="closeAllPopups()">Cancel</button>
+          <button class="btn-primary" onclick="confirmOTP()">Confirm &amp; Proceed</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- POPUP: REQUEST BLOOD (2 slides) -->
+  <div id="requestBloodPopup" class="modal-overlay hidden">
+    <div class="modal modal-wide">
+
+      <!-- Donor matching view -->
+      <div id="reqSlide2">
+        <div class="modal-heading">Send Alert to Nearby Donors</div>
+        <p style="margin-bottom: 14px;">Blood group <strong id="slide2Group">B+</strong>, component <strong id="slide2Component">Whole Blood</strong>, pincode <strong id="slide2Pincode">560001</strong>.</p>
+
+        <div class="match-breakdown">
+          <div class="match-breakdown-heading">Matching Donors by Distance</div>
+          <table class="match-table">
+            <thead>
+              <tr>
+                <th>Radius</th>
+                <th>Matching Donors</th>
+                <th>Note</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td>Within 5 km</td><td><strong>3</strong></td><td></td></tr>
+              <tr><td>Within 10 km</td><td><strong>7</strong></td><td class="muted">includes donors within 5 km</td></tr>
+              <tr><td>Within 20 km</td><td><strong>14</strong></td><td class="muted">includes donors within 10 km</td></tr>
+              <tr><td>Within 50 km</td><td><strong>22</strong></td><td class="muted">includes donors within 20 km</td></tr>
+              <tr><td>Beyond 50 km</td><td><strong>31</strong></td><td class="muted">total across all distances</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p style="margin-top:12px; font-size:13px; color:#555;">Only the 20 nearest donors will be notified. Next request can be sent after 1 hour.</p>
+
+        <div class="modal-actions">
+          <button class="btn-secondary" onclick="closeAllPopups()">Cancel</button>
+          <button class="btn-primary" onclick="confirmRequest()">Confirm - Notify 20 Nearest Donors</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+
+  <!-- POPUP: CONFIRMATION -->
+  <div id="confirmationPopup" class="modal-overlay hidden">
+    <div class="modal">
+      <div class="modal-heading">Request Sent</div>
+      <div class="confirm-id-block">
+        <div class="confirm-id-label">Your Request ID</div>
+        <div class="confirm-id-value" id="generatedRequestId">REQ-003</div>
+      </div>
+
+      <div class="modal-actions" style="margin-top: 16px;">
+        <button class="btn-primary" style="width:100%;" onclick="goToDashboard()">Go to Dashboard</button>
+      </div>
+    </div>
+  </div>
+
+
+  <script src="script.js"></script>
+</body>
+</html>
