@@ -94,14 +94,39 @@
     <!-- Main Admin Dashboard (Initially Hidden) -->
     <div id="dashboardScreen" class="dashboard-screen" style="display: none;">
   <div id="adminDashboard" class="page">
-    <div class="topbar">
-      <div class="topbar-left">
-        <span class="site-name">Hemo-Connect</span>
-        <span class="site-tagline">Admin Analytics Dashboard</span>
+    <!-- Enhanced Admin Header -->
+    <div class="admin-header">
+      <div class="header-left">
+        <div class="logo">
+          <span class="logo-icon">🩸</span>
+          <span class="logo-text">Hemo-Connect Admin</span>
+        </div>
+        <div class="admin-info">
+          <span class="admin-role" id="adminRole">Regional Administrator</span>
+          <span class="admin-region" id="adminRegion">North Region</span>
+        </div>
       </div>
-      <div class="topbar-right">
-        <span class="user-badge">Admin Panel</span>
-        <button class="btn-secondary" onclick="window.open('index.html', '_blank')">View Portal</button>
+      
+      <div class="header-center">
+        <h1 class="dashboard-title">Blood Donation Management Dashboard</h1>
+        <div class="live-indicator">
+          <span class="status-dot live"></span>
+          <span>Live Data</span>
+          <span class="last-update" id="lastUpdate">Updated: 2 mins ago</span>
+        </div>
+      </div>
+      
+      <div class="header-right">
+        <div class="admin-profile">
+          <div class="profile-info">
+            <span class="admin-name" id="adminName">Administrator</span>
+            <span class="login-time" id="loginTime">Logged in: 09:30 AM</span>
+          </div>
+          <div class="profile-actions">
+            <button class="profile-btn" onclick="showProfile()" title="Profile Settings">⚙️</button>
+            <button class="logout-btn" onclick="initiateLogout()" title="Logout">🚪</button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -451,7 +476,20 @@
       </div>
 
     </div>
-  </div>
+    
+    <!-- Logout Panel -->
+    <div id="logoutPanel" class="logout-panel" style="display: none;">
+      <div class="logout-content">
+        <h3>Logout Confirmation</h3>
+        <p>Are you sure you want to logout from the admin dashboard?</p>
+        <div class="logout-actions">
+          <button class="btn-cancel" onclick="cancelLogout()">Cancel</button>
+          <button class="btn-logout" onclick="confirmLogout()">Logout</button>
+        </div>
+      </div>
+    </div>
+    
+  </div> <!-- End Dashboard Screen -->
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
     integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
