@@ -1,6 +1,442 @@
 /* ===================================================
    Hemo-Connect - ADMIN DASHBOARD CSS
-   Grayscale analytics dashboard styling
+   Authentication + Grayscale analytics dashboard styling
+=================================================== */
+
+/* ===================================================
+   AUTHENTICATION SCREEN STYLING
+=================================================== */
+
+.auth-screen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100vh;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+}
+
+.auth-container {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(10px);
+  border-radius: 16px;
+  padding: 40px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+  max-width: 450px;
+  width: 90%;
+  text-align: center;
+}
+
+.auth-header .auth-logo {
+  margin-bottom: 30px;
+}
+
+.auth-logo .logo-icon {
+  font-size: 48px;
+  display: block;
+  margin-bottom: 10px;
+}
+
+.auth-logo h1 {
+  font-size: 28px;
+  color: #333;
+  margin: 0 0 8px 0;
+  font-weight: bold;
+}
+
+.auth-logo p {
+  color: #666;
+  font-size: 14px;
+  margin: 0;
+}
+
+.auth-form h2 {
+  color: #333;
+  margin-bottom: 8px;
+  font-size: 22px;
+}
+
+.auth-subtitle {
+  color: #666;
+  font-size: 14px;
+  margin-bottom: 25px;
+}
+
+.form-group {
+  margin-bottom: 20px;
+  position: relative;
+  text-align: left;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 6px;
+  color: #333;
+  font-weight: 500;
+  font-size: 13px;
+}
+
+.form-group input,
+.form-group select {
+  width: 100%;
+  padding: 12px 40px 12px 16px;
+  border: 2px solid #e1e5e9;
+  border-radius: 8px;
+  font-size: 14px;
+  transition: border-color 0.3s ease;
+  box-sizing: border-box;
+}
+
+.form-group input:focus,
+.form-group select:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.input-icon {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  margin-top: 10px;
+  font-size: 16px;
+  color: #999;
+}
+
+.login-btn {
+  width: 100%;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  padding: 14px;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.login-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(102, 126, 234, 0.3);
+}
+
+.login-btn:active {
+  transform: translateY(0);
+}
+
+.btn-loader {
+  animation: rotate 1s infinite linear;
+}
+
+@keyframes rotate {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.demo-credentials {
+  background: #f8f9fa;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 20px;
+  border-left: 4px solid #28a745;
+}
+
+.demo-credentials h4 {
+  margin: 0 0 10px 0;
+  color: #333;
+  font-size: 14px;
+}
+
+.cred-item {
+  font-size: 12px;
+  color: #666;
+  margin-bottom: 4px;
+}
+
+.auth-links {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  font-size: 13px;
+}
+
+.auth-links a {
+  color: #667eea;
+  text-decoration: none;
+}
+
+.auth-links a:hover {
+  text-decoration: underline;
+}
+
+.auth-security {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid #eee;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  color: #666;
+}
+
+.security-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dashboard-screen {
+  width: 100%;
+  height: 100vh;
+  overflow: auto;
+}
+
+/* ===================================================
+   ENHANCED ADMIN HEADER STYLING
+=================================================== */
+
+.admin-header {
+  background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+  color: white;
+  padding: 16px 24px;
+  display: grid;
+  grid-template-columns: 1fr 2fr 1fr;
+  align-items: center;
+  gap: 20px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+  border-bottom: 3px solid #3498db;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.logo-icon {
+  font-size: 24px;
+}
+
+.logo-text {
+  font-size: 18px;
+  font-weight: bold;
+}
+
+.admin-info {
+  display: flex;
+  flex-direction: column;
+  font-size: 12px;
+}
+
+.admin-role {
+  color: #3498db;
+  font-weight: 600;
+}
+
+.admin-region {
+  color: #bdc3c7;
+  margin-top: 2px;
+}
+
+.header-center {
+  text-align: center;
+}
+
+.dashboard-title {
+  margin: 0 0 6px 0;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.live-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 11px;
+  color: #bdc3c7;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #27ae60;
+}
+
+.status-dot.live {
+  animation: pulse-green 2s infinite;
+}
+
+@keyframes pulse-green {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.2);
+    opacity: 0.7;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.header-right {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.admin-profile {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.profile-info {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  font-size: 12px;
+}
+
+.admin-name {
+  font-weight: 600;
+  color: #ecf0f1;
+}
+
+.login-time {
+  color: #bdc3c7;
+  margin-top: 2px;
+}
+
+.profile-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.profile-btn,
+.logout-btn {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: white;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  transition: all 0.3s ease;
+}
+
+.profile-btn:hover,
+.logout-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+  transform: translateY(-1px);
+}
+
+.logout-btn {
+  background: rgba(231, 76, 60, 0.2);
+  border-color: rgba(231, 76, 60, 0.3);
+}
+
+.logout-btn:hover {
+  background: rgba(231, 76, 60, 0.3);
+}
+
+/* ===================================================
+   LOGOUT PANEL STYLING
+=================================================== */
+
+.logout-panel {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+.logout-content {
+  background: white;
+  padding: 30px;
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+  text-align: center;
+  max-width: 400px;
+}
+
+.logout-content h3 {
+  margin: 0 0 15px 0;
+  color: #333;
+}
+
+.logout-content p {
+  margin: 0 0 25px 0;
+  color: #666;
+}
+
+.logout-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+
+.btn-cancel,
+.btn-logout {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.3s ease;
+}
+
+.btn-cancel {
+  background: #95a5a6;
+  color: white;
+}
+
+.btn-cancel:hover {
+  background: #7f8c8d;
+}
+
+.btn-logout {
+  background: #e74c3c;
+  color: white;
+}
+
+.btn-logout:hover {
+  background: #c0392b;
+}
+
+/* ===================================================
+   ORIGINAL ADMIN DASHBOARD STYLING
 =================================================== */
 
 /* ---- Admin Layout ---- */
