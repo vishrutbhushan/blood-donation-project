@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    crossorigin=""/>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.Default.css" />
+  <title>Hemo-Connect - Admin Analytics Dashboard</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="admin-style.css" />
+</head>
+<body>
+    <!-- Authentication Screen -->
+    <div id="authScreen" class="auth-screen">
+      <div class="auth-container">
+        <div class="auth-header">
+          <div class="auth-logo">
+            <div class="logo-icon">🩸</div>
+            <h1>Hemo-Connect</h1>
+            <p>Admin Authentication Portal</p>
+          </div>
+        </div>
+        
+        <div class="auth-form">
+          <h2>Admin Login</h2>
+          <p class="auth-subtitle">Access blood donation management dashboard</p>
+          
+          <form id="loginForm" onsubmit="return handleLogin(event)">
+            <div class="form-group">
+              <label for="adminId">Admin ID</label>
+              <input type="text" id="adminId" name="adminId" placeholder="Enter your Admin ID" required>
+              <div class="input-icon">👤</div>
+            </div>
+            
+            <div class="form-group">
+              <label for="password">Password</label>
+              <input type="password" id="password" name="password" placeholder="Enter your password" required>
+              <div class="input-icon">🔒</div>
+            </div>
+            
+            <div class="form-group">
+              <label for="region">Administrative Region</label>
+              <select id="region" name="region" required>
+                <option value="">Select your region</option>
+                <option value="north">North Region</option>
+                <option value="south">South Region</option>
+                <option value="east">East Region</option>
+                <option value="west">West Region</option>
+                <option value="central">Central Operations</option>
+                <option value="national">National Administrator</option>
+              </select>
+            </div>
+            
+            <button type="submit" class="login-btn" id="loginBtn">
+              <span class="btn-text">Access Dashboard</span>
+              <span class="btn-loader" style="display: none;">🔄</span>
+            </button>
+          </form>
+          
+          <div class="auth-footer">
+            <div class="demo-credentials">
+              <h4>Demo Credentials:</h4>
+              <div class="cred-item">
+                <strong>Admin ID:</strong> admin123 | <strong>Password:</strong> hemo2026
+              </div>
+              <div class="cred-item">
+                <strong>Manager ID:</strong> manager456 | <strong>Password:</strong> blood2026
+              </div>
+            </div>
+            
+            <div class="auth-links">
+              <a href="#" onclick="showForgotPassword()">Forgot Password?</a>
+              <span>|</span>
+              <a href="#" onclick="showHelp()">Need Help?</a>
+            </div>
+          </div>
+        </div>
+        
+        <div class="auth-security">
+          <div class="security-info">
+            <span class="security-icon">🔐</span>
+            <span>Secure Admin Access</span>
+          </div>
+          <div class="last-login" id="lastLogin" style="display: none;">
+            Last login: Never
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main Admin Dashboard (Initially Hidden) -->
+    <div id="dashboardScreen" class="dashboard-screen" style="display: none;">
+  <div id="adminDashboard" class="page">
+    <div class="topbar">
+      <div class="topbar-left">
+        <span class="site-name">Hemo-Connect</span>
+        <span class="site-tagline">Admin Analytics Dashboard</span>
+      </div>
+      <div class="topbar-right">
+        <span class="user-badge">Admin Panel</span>
+        <button class="btn-secondary" onclick="window.open('index.html', '_blank')">View Portal</button>
+      </div>
+    </div>
+
+    <div class="admin-body">
+      <!-- Key Metrics Row -->
+      <div class="metrics-row">
+        <div class="metric-card">
+          <div class="metric-value">2,847</div>
+          <div class="metric-label">Active Donors</div>
+          <div class="metric-change">+12% from last month</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-value">143</div>
+          <div class="metric-label">Active Requests</div>
+          <div class="metric-change">-8% from yesterday</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-value">89</div>
+          <div class="metric-label">Blood Banks</div>
+          <div class="metric-change">+2 new this month</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-value">94%</div>
+          <div class="metric-label">Fulfillment Rate</div>
+          <div class="metric-change">+3% improvement</div>
+        </div>
+      </div>
+
+      <!-- Main Content Row - Dual Maps -->
+      <div class="content-row">
+        <!-- Blood Donation Camps Map -->
+        <div class="map-section">
+          <div class="section-title">Blood Donation Regions & Camps</div>
+          <div class="map-controls">
+            <button class="map-btn" onclick="resetMapView()">Reset View</button>
+            <button class="map-btn" onclick="toggleHeatmap()">Toggle Heatmap</button>
+            <button class="map-btn" onclick="toggleClusters()">Toggle Clusters</button>
+            <button class="map-btn" onclick="showHeatmapLegend()">Heatmap Legend</button>
+            <select id="stateSelector" onchange="focusOnState(this.value)">
+              <option value="">Select State</option>
+              <option value="delhi">Delhi</option>
+              <option value="maharashtra">Maharashtra</option>
+              <option value="karnataka">Karnataka</option>
+              <option value="tamilnadu">Tamil Nadu</option>
+              <option value="westbengal">West Bengal</option>
+              <option value="gujarat">Gujarat</option>
+              <option value="rajasthan">Rajasthan</option>
+              <option value="punjab">Punjab</option>
+              <option value="up">Uttar Pradesh</option>
+            </select>
+          </div>
+          <div class="map-container">
+            <div id="indiaMap" class="leaflet-map"></div>
+            <div class="heatmap-info" id="heatmapInfo" style="display: none;">
+              <div class="info-title">Heatmap Active</div>
+              <div class="info-text">Colors represent blood donation activity levels across regions. Click circles for details.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Donor Availability Map -->
+        <div class="map-section">
+          <div class="section-title">Donor Availability & Recent Requests</div>
+          <div class="map-controls">
+            <button class="map-btn" onclick="resetDonorMapView()">Reset View</button>
+            <button class="map-btn" onclick="toggleDonorHeatmap()">Toggle Donor Heatmap</button>
+            <button class="map-btn" onclick="toggleRecentRequests()">Recent Requests</button>
+            <select id="bloodGroupFilter" onchange="filterByBloodGroup(this.value)">
+              <option value="">All Blood Groups</option>
+              <option value="O+">O+ Donors</option>
+              <option value="A+">A+ Donors</option>
+              <option value="B+">B+ Donors</option>
+              <option value="AB+">AB+ Donors</option>
+              <option value="O-">O- Donors</option>
+              <option value="A-">A- Donors</option>
+              <option value="B-">B- Donors</option>
+              <option value="AB-">AB- Donors</option>
+            </select>
+          </div>
+          <div class="map-container">
+            <div id="donorMap" class="leaflet-map"></div>
+            <div class="donor-info" id="donorInfo">
+              <div class="info-title">Live Donor Status</div>
+              <div class="info-stats">
+                <div class="stat-item">
+                  <span class="stat-dot available"></span>
+                  <span>Available: <strong id="availableCount">2,847</strong></span>
+                </div>
+                <div class="stat-item">
+                  <span class="stat-dot busy"></span>
+                  <span>Busy: <strong id="busyCount">156</strong></span>
+                </div>
+                <div class="stat-item">
+                  <span class="stat-dot request"></span>
+                  <span>Active Requests: <strong id="requestCount">143</strong></span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Regional Stats Row -->
+      <div class="stats-row">
+        <div class="regional-stats">
+          <div class="section-title">Regional Overview</div>
+          <div id="regionDetails">
+            <div class="region-stat-card">
+              <div class="region-name">All Regions Overview</div>
+              <div class="region-metrics">
+                <div class="region-metric">
+                  <span class="metric-label">Total Camps</span>
+                  <span class="metric-value">156</span>
+                </div>
+                <div class="region-metric">
+                  <span class="metric-label">Active Donors</span>
+                  <span class="metric-value">2,847</span>
+                </div>
+                <div class="region-metric">
+                  <span class="metric-label">Units Collected</span>
+                  <span class="metric-value">4,230</span>
+                </div>
+                <div class="region-metric">
+                  <span class="metric-label">Avg Response Time</span>
+                  <span class="metric-value">16 mins</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      </div>
+
+      <!-- Analytics Row -->
+      <div class="analytics-row">
+        <!-- Blood Group Distribution -->
+        <div class="chart-section">
+          <div class="section-title">Blood Group Distribution</div>
+          <div class="blood-group-chart">
+            <div class="chart-bar">
+              <div class="bar-label">O+</div>
+              <div class="bar-container">
+                <div class="bar" style="width: 85%;" data-value="37.4%"></div>
+              </div>
+            </div>
+            <div class="chart-bar">
+              <div class="bar-label">A+</div>
+              <div class="bar-container">
+                <div class="bar" style="width: 70%;" data-value="35.7%"></div>
+              </div>
+            </div>
+            <div class="chart-bar">
+              <div class="bar-label">B+</div>
+              <div class="bar-container">
+                <div class="bar" style="width: 60%;" data-value="8.5%"></div>
+              </div>
+            </div>
+            <div class="chart-bar">
+              <div class="bar-label">AB+</div>
+              <div class="bar-container">
+                <div class="bar" style="width: 25%;" data-value="3.4%"></div>
+              </div>
+            </div>
+            <div class="chart-bar">
+              <div class="bar-label">O-</div>
+              <div class="bar-container">
+                <div class="bar" style="width: 45%;" data-value="6.6%"></div>
+              </div>
+            </div>
+            <div class="chart-bar">
+              <div class="bar-label">A-</div>
+              <div class="bar-container">
+                <div class="bar" style="width: 40%;" data-value="6.3%"></div>
+              </div>
+            </div>
+            <div class="chart-bar">
+              <div class="bar-label">B-</div>
+              <div class="bar-container">
+                <div class="bar" style="width: 15%;" data-value="1.5%"></div>
+              </div>
+            </div>
+            <div class="chart-bar">
+              <div class="bar-label">AB-</div>
+              <div class="bar-container">
+                <div class="bar" style="width: 8%;" data-value="0.6%"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Request Heatmap -->
+        <div class="heatmap-section">
+          <div class="section-title">
+            Request Activity Heatmap (Last 7 Days)
+            <div class="section-subtitle">Peak hours: 12PM-6PM weekdays | Low activity: weekends</div>
+          </div>
+          <div class="heatmap-container">
+            <div class="heatmap-grid">
+              <div class="heatmap-labels-y">
+                <div class="heatmap-label">Mon</div>
+                <div class="heatmap-label">Tue</div>
+                <div class="heatmap-label">Wed</div>
+                <div class="heatmap-label">Thu</div>
+                <div class="heatmap-label">Fri</div>
+                <div class="heatmap-label">Sat</div>
+                <div class="heatmap-label">Sun</div>
+              </div>
+              <div class="heatmap-content">
+                <div class="heatmap-labels-x">
+                  <div class="heatmap-label">6AM</div>
+                  <div class="heatmap-label">9AM</div>
+                  <div class="heatmap-label">12PM</div>
+                  <div class="heatmap-label">3PM</div>
+                  <div class="heatmap-label">6PM</div>
+                  <div class="heatmap-label">9PM</div>
+                </div>
+                <div class="heatmap-cells" id="heatmapCells"></div>
+              </div>
+            </div>
+            <div class="heatmap-legend-enhanced">
+              <div class="legend-title">Request Intensity</div>
+              <div class="legend-scale-container">
+                <span class="legend-text">Less</span>
+                <div class="heatmap-scale">
+                  <div class="scale-cell level-0" title="0-5 requests"></div>
+                  <div class="scale-cell level-1" title="6-15 requests"></div>
+                  <div class="scale-cell level-2" title="16-25 requests"></div>
+                  <div class="scale-cell level-3" title="26-35 requests"></div>
+                  <div class="scale-cell level-4" title="35+ requests"></div>
+                </div>
+                <span class="legend-text">More</span>
+              </div>
+              <div class="heatmap-stats">
+                <div class="stat-summary">
+                  <span class="highlight">Peak Day:</span> Wednesday (avg 28 requests/hour)<br>
+                  <span class="highlight">Peak Time:</span> 3PM-6PM (avg 31 requests)<br>
+                  <span class="highlight">Total This Week:</span> 1,247 requests
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Data Tables Row -->
+      <div class="tables-row">
+        <!-- Recent Requests -->
+        <div class="table-section">
+          <div class="section-title">Recent Blood Requests</div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Request ID</th>
+                  <th>Blood Group</th>
+                  <th>Location</th>
+                  <th>Status</th>
+                  <th>Responses</th>
+                  <th>Time</th>
+                </tr>
+              </thead>
+              <tbody id="recentRequestsBody">
+                <tr>
+                  <td><strong>REQ-145</strong></td>
+                  <td>B+</td>
+                  <td>Bangalore - 560001</td>
+                  <td><span class="status-badge active">Active</span></td>
+                  <td>3 donors</td>
+                  <td>2 mins ago</td>
+                </tr>
+                <tr>
+                  <td><strong>REQ-144</strong></td>
+                  <td>O-</td>
+                  <td>Mumbai - 400001</td>
+                  <td><span class="status-badge fulfilled">Fulfilled</span></td>
+                  <td>1 donor</td>
+                  <td>15 mins ago</td>
+                </tr>
+                <tr>
+                  <td><strong>REQ-143</strong></td>
+                  <td>AB+</td>
+                  <td>Delhi - 110001</td>
+                  <td><span class="status-badge pending">Pending</span></td>
+                  <td>0 responses</td>
+                  <td>1 hour ago</td>
+                </tr>
+                <tr>
+                  <td><strong>REQ-142</strong></td>
+                  <td>A+</td>
+                  <td>Chennai - 600001</td>
+                  <td><span class="status-badge fulfilled">Fulfilled</span></td>
+                  <td>2 donors</td>
+                  <td>2 hours ago</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Top Performing Blood Banks -->
+        <div class="table-section">
+          <div class="section-title">Top Performing Blood Banks</div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Blood Bank</th>
+                  <th>Region</th>
+                  <th>Requests Fulfilled</th>
+                  <th>Response Time</th>
+                  <th>Stock Level</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>Apollo Blood Bank</strong></td>
+                  <td>South</td>
+                  <td>28</td>
+                  <td>12 mins</td>
+                  <td><span class="stock-level high">High</span></td>
+                </tr>
+                <tr>
+                  <td><strong>AIIMS Blood Centre</strong></td>
+                  <td>North</td>
+                  <td>24</td>
+                  <td>15 mins</td>
+                  <td><span class="stock-level medium">Medium</span></td>
+                </tr>
+                <tr>
+                  <td><strong>Tata Memorial</strong></td>
+                  <td>West</td>
+                  <td>22</td>
+                  <td>18 mins</td>
+                  <td><span class="stock-level high">High</span></td>
+                </tr>
+                <tr>
+                  <td><strong>PGIMER</strong></td>
+                  <td>North</td>
+                  <td>19</td>
+                  <td>22 mins</td>
+                  <td><span class="stock-level low">Low</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+    crossorigin=""></script>
+  <script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
+  <script src="admin-script.js"></script>
+</body>
+</html>
