@@ -18,33 +18,37 @@
       <div class="auth-container">
         <div class="auth-header">
           <div class="auth-logo">
-            <div class="logo-icon">🩸</div>
-            <h1>Hemo-Connect</h1>
-            <p>Admin Authentication Portal</p>
+            <div class="logo-container">
+              <div class="logo-icon">H</div>
+              <div class="logo-text">
+                <h1>Hemo-Connect</h1>
+                <span class="logo-tagline">Blood Donation Management System</span>
+              </div>
+            </div>
           </div>
         </div>
         
         <div class="auth-form">
-          <h2>Admin Login</h2>
-          <p class="auth-subtitle">Access blood donation management dashboard</p>
+          <div class="form-header">
+            <h2>Administrator Login</h2>
+            <p class="auth-subtitle">Please enter your credentials to access the dashboard</p>
+          </div>
           
           <form id="loginForm" onsubmit="return handleLogin(event)">
             <div class="form-group">
-              <label for="adminId">Admin ID</label>
-              <input type="text" id="adminId" name="adminId" placeholder="Enter your Admin ID" required>
-              <div class="input-icon">👤</div>
+              <label for="adminId">Username</label>
+              <input type="text" id="adminId" name="adminId" placeholder="Enter username" required>
             </div>
             
             <div class="form-group">
               <label for="password">Password</label>
-              <input type="password" id="password" name="password" placeholder="Enter your password" required>
-              <div class="input-icon">🔒</div>
+              <input type="password" id="password" name="password" placeholder="Enter password" required>
             </div>
             
             <div class="form-group">
-              <label for="region">Administrative Region</label>
+              <label for="region">Region</label>
               <select id="region" name="region" required>
-                <option value="">Select your region</option>
+                <option value="">Select Region</option>
                 <option value="north">North Region</option>
                 <option value="south">South Region</option>
                 <option value="east">East Region</option>
@@ -55,34 +59,35 @@
             </div>
             
             <button type="submit" class="login-btn" id="loginBtn">
-              <span class="btn-text">Access Dashboard</span>
-              <span class="btn-loader" style="display: none;">🔄</span>
+              <span class="btn-text">Sign In</span>
+              <span class="btn-loader" style="display: none;">●●●</span>
             </button>
           </form>
           
           <div class="auth-footer">
             <div class="demo-credentials">
-              <h4>Demo Credentials:</h4>
-              <div class="cred-item">
-                <strong>Admin ID:</strong> admin123 | <strong>Password:</strong> hemo2026
+              <p class="demo-title">Demo Access:</p>
+              <div class="cred-row">
+                <span>Username: admin123</span>
+                <span>Password: hemo2026</span>
               </div>
-              <div class="cred-item">
-                <strong>Manager ID:</strong> manager456 | <strong>Password:</strong> blood2026
+              <div class="cred-row">
+                <span>Username: manager456</span>
+                <span>Password: blood2026</span>
               </div>
             </div>
             
             <div class="auth-links">
               <a href="#" onclick="showForgotPassword()">Forgot Password?</a>
-              <span>|</span>
-              <a href="#" onclick="showHelp()">Need Help?</a>
+              <span class="separator">•</span>
+              <a href="#" onclick="showHelp()">Contact Support</a>
             </div>
           </div>
         </div>
         
         <div class="auth-security">
           <div class="security-info">
-            <span class="security-icon">🔐</span>
-            <span>Secure Admin Access</span>
+            <span class="security-text">Secure Connection</span>
           </div>
           <div class="last-login" id="lastLogin" style="display: none;">
             Last login: Never
