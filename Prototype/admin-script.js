@@ -9,10 +9,10 @@
 
 // Valid admin credentials (in real app, this would be server-side)
 var validCredentials = {
-  'admin123': { password: 'hemo2026', role: 'National Administrator', region: 'All Regions', name: 'Dr. Sarah Johnson' },
-  'manager456': { password: 'blood2026', role: 'Regional Manager', region: 'North Region', name: 'Rajesh Kumar' },
-  'manager789': { password: 'blood2026', role: 'Regional Manager', region: 'South Region', name: 'Priya Sharma' },
-  'admin456': { password: 'admin2026', role: 'Regional Administrator', region: 'West Region', name: 'Ahmed Khan' }
+  'admin123': { password: 'hemo2026', role: 'National Administrator', region: 'All Regions', name: 'Dr. Yashvardhan Sharma' },
+  'manager456': { password: 'blood2026', role: 'Regional Manager', region: 'North Region', name: 'Dr.Rajesh Kumar' },
+  'manager789': { password: 'blood2026', role: 'Regional Manager', region: 'South Region', name: 'Dr. Vighnesh' },
+  'admin456': { password: 'admin2026', role: 'Regional Administrator', region: 'West Region', name: 'Dr.B' }
 };
 
 // Current session info
