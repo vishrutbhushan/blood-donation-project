@@ -1,0 +1,22 @@
+{
+  "index_patterns": ["donor_availability_current*"],
+  "template": {
+    "settings": {
+      "number_of_shards": 1,
+      "number_of_replicas": 0,
+      "refresh_interval": "5s"
+    },
+    "mappings": {
+      "dynamic": "strict",
+      "properties": {
+        "source": { "type": "keyword" },
+        "source_record_id": { "type": "keyword" },
+        "event_time": { "type": "date" },
+        "blood_group": { "type": "keyword" },
+        "location": { "type": "geo_point" },
+        "last_donated_at": { "type": "date" },
+        "availability_status": { "type": "keyword" }
+      }
+    }
+  }
+}
