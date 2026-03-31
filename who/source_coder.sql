@@ -34,6 +34,8 @@ CREATE TABLE who_source.blood_inventory (
 CREATE TABLE who_source.blood_donor (
     donor_id SERIAL PRIMARY KEY,
 
+    bb_id INT REFERENCES who_source.blood_bank(bb_id) ON DELETE SET NULL,
+
     name VARCHAR(100),
     aadhaar_hash VARCHAR(255),
 
