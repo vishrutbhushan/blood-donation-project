@@ -22,3 +22,20 @@ services:
       - elasticsearch
 volumes:
   es_data:
+
+db:
+    image: postgres:16
+    container_name: hemo_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: bloodbank
+      POSTGRES_USER: hemo_user
+      POSTGRES_PASSWORD: hemo_pass
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./schema.sql:/docker-entrypoint-initdb.d/01_schema.sql
+      - hemo_pgdata:/var/lib/postgresql/data
+
+volumes:
+  hemo_pgdata:
