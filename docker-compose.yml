@@ -9,8 +9,6 @@ services:
       cluster.initial_master_nodes: elasticsearch,elasticsearch-2,elasticsearch-3
       xpack.security.enabled: "false"
       ES_JAVA_OPTS: -Xms1g -Xmx1g
-    ports:
-      - "9200:9200"
     volumes:
       - es_data_1:/usr/share/elasticsearch/data
     healthcheck:
@@ -69,13 +67,32 @@ services:
       POSTGRES_DB: bloodbank
       POSTGRES_USER: hemo_user
       POSTGRES_PASSWORD: hemo_pass
+    command:
+      - bash
+      - -ec
+      - |
+        docker-entrypoint.sh postgres \
+          -c wal_level=replica \
+          -c max_wal_senders=10 \
+          -c max_replication_slots=10 \
+          -c hot_standby=on \
+          -c listen_addresses=* &
+        pid=$!
+        until [ -f "$$PGDATA/pg_hba.conf" ]; do
+          sleep 1
+        done
+        if ! grep -q '^host replication hemo_user 0.0.0.0/0 scram-sha-256$$' "$$PGDATA/pg_hba.conf"; then
+          echo 'host replication hemo_user 0.0.0.0/0 scram-sha-256' >> "$$PGDATA/pg_hba.conf"
+          pg_ctl -D "$$PGDATA" reload || true
+        fi
+        wait $$pid
     ports:
       - "5432:5432"
     volumes:
       - pg_primary_data:/var/lib/postgresql/data
       - ./backend/src/main/resources/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U hemo_user -d bloodbank"]
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U hemo_user -d bloodbank"]
       interval: 10s
       timeout: 5s
       retries: 30
@@ -83,17 +100,33 @@ services:
   postgres-replica:
     image: postgres:16
     container_name: postgres-replica
+    depends_on:
+      postgres-primary:
+        condition: service_healthy
     environment:
       POSTGRES_DB: bloodbank
       POSTGRES_USER: hemo_user
       POSTGRES_PASSWORD: hemo_pass
+      PGPASSWORD: hemo_pass
+    command:
+      - bash
+      - -ec
+      - |
+        if [ ! -s "$$PGDATA/PG_VERSION" ]; then
+          until pg_basebackup -h postgres-primary -p 5432 -D "$$PGDATA" -U hemo_user -v -P -R -X stream -C -S replica_slot; do
+            echo "Waiting for primary to accept replication connections..."
+            sleep 2
+          done
+          chown -R postgres:postgres "$$PGDATA"
+          chmod 700 "$$PGDATA"
+        fi
+        exec docker-entrypoint.sh postgres
     ports:
       - "5433:5432"
     volumes:
       - pg_replica_data:/var/lib/postgresql/data
-      - ./backend/src/main/resources/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U hemo_user -d bloodbank"]
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U hemo_user -d bloodbank"]
       interval: 10s
       timeout: 5s
       retries: 30
@@ -136,9 +169,6 @@ services:
       - CLICKHOUSE_USER=default
       - CLICKHOUSE_PASSWORD=clickhouse
       - CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1
-    ports:
-      - "8123:8123"
-      - "9000:9000"
     volumes:
       - ch_data_1:/var/lib/clickhouse
       - ./Clickhouse/resources/schema_clickhouse.sql:/docker-entrypoint-initdb.d/01_schema_clickhouse.sql:ro

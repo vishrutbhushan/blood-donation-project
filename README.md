@@ -8,7 +8,7 @@ The stack uses service-level horizontal scaling where it makes sense:
 
 - Elasticsearch runs as a 3-node cluster for search and index availability.
 - ClickHouse runs as a 3-node cluster for analytics storage and distributed reads.
-- PostgreSQL is split into a primary and a replica container for app database isolation and scale testing.
+- PostgreSQL uses a primary-replica topology with streaming replication for read scaling and failover-oriented architecture.
 - The Redcross and WHO databases run as separate PostgreSQL instances.
 - Backend services, Grafana, and the frontend remain single instances in the current setup.
 
@@ -24,7 +24,7 @@ Services communicate directly over the Docker Compose network using service name
 - Grafana connects to Elasticsearch and ClickHouse through provisioned datasources.
 - The ETL service, when run, talks to the source services and pushes data to ClickHouse and Elasticsearch.
 
-For local host access, the main services are also published on ports such as `8080`, `8081`, `8082`, `3000`, `3001`, `5432`, `5433`, `5434`, `5435`, `9200`, `8123`, and `9000`.
+For local host access, the application and PostgreSQL services are published on ports such as `8080`, `8081`, `8082`, `3000`, `3001`, `5432`, `5433`, `5434`, and `5435`. Elasticsearch and ClickHouse are internal-only.
 
 ## Proxies
 
@@ -32,12 +32,12 @@ There is no reverse proxy layer in the current stack.
 
 - No Nginx, Traefik, or API gateway sits in front of the services.
 - Containers talk to each other directly by service name.
-- The ETL service uses `host.docker.internal` to reach host-published services when needed.
+- The ETL service should use Docker service DNS names when it runs in the stack network.
 
 ## Where Data Lives
 
 - `postgres-primary`: main blood bank application data, initialized from `backend/src/main/resources/schema.sql`.
-- `postgres-replica`: a separate PostgreSQL instance with the same schema, used for replica/scaling topology.
+- `postgres-replica`: streaming replica of `postgres-primary` for read-scaling and replication topology.
 - `redcross-db`: Redcross source data, initialized from `Redcross/src/main/resources/sourcetables.sql`.
 - `who-db`: WHO source data, initialized from `who/src/main/resources/source_coder.sql`.
 - `elasticsearch`: indexed search documents for blood banks and donors.
