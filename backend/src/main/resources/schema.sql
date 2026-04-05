@@ -1,70 +1,55 @@
--- ============================================================
--- ENUM type
--- ============================================================
-CREATE TYPE request_status AS ENUM ('ACTIVE', 'FULFILLED', 'NO_RESPONSE');
-
--- ============================================================
--- 1. search
--- ============================================================
-CREATE TABLE search (
-    search_id   UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
-    city        VARCHAR(100) NOT NULL,
-    blood_group VARCHAR(3)   NOT NULL,
-    lat         DECIMAL(9,6),
-    lng         DECIMAL(9,6),
-    searched_at TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+CREATE TABLE users (
+    user_id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    phone VARCHAR(15) UNIQUE NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- ============================================================
--- 2. otp
--- ============================================================
-CREATE TABLE otp (
-    otp_id      UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-    phone       VARCHAR(15) NOT NULL,
-    otp_code    VARCHAR(6)  NOT NULL,
-    expiry_time TIMESTAMPTZ NOT NULL,
-    is_verified BOOLEAN     NOT NULL DEFAULT FALSE,
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-
-    CONSTRAINT uq_otp_phone_verified UNIQUE (phone, is_verified)
+CREATE TABLE searches (
+    search_id SERIAL PRIMARY KEY,
+    user_id INT REFERENCES users(user_id) ON DELETE CASCADE,
+    hospital_name VARCHAR(150),
+    hospital_pincode VARCHAR(10),
+    blood_group VARCHAR(5),
+    blood_component VARCHAR(20),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- ============================================================
--- 3. user  (quoted because it's a reserved word in PostgreSQL)
--- ============================================================
-CREATE TABLE "user" (
-    user_id    UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
-    name       VARCHAR(100) NOT NULL,
-    phone      VARCHAR(15)  NOT NULL,
-    pincode    VARCHAR(10),
-    blood_group VARCHAR(3),
-    created_at TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-
-    CONSTRAINT uq_user_phone UNIQUE (phone)
+CREATE TABLE requests (
+    request_id SERIAL PRIMARY KEY,
+    search_id INT REFERENCES searches(search_id) ON DELETE CASCADE,
+    
+    blood_group VARCHAR(5) NOT NULL,
+    component VARCHAR(20) NOT NULL,
+    
+    units_requested INT DEFAULT 1,
+    
+    number_of_donors_contacted INT DEFAULT 0,
+    
+    status VARCHAR(20) CHECK (status IN ('ACTIVE', 'INACTIVE')) DEFAULT 'ACTIVE',
+    
+    parent_request_id INT,
+    
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    FOREIGN KEY (parent_request_id) REFERENCES requests(request_id) ON DELETE SET NULL
 );
 
--- ============================================================
--- 4. request
--- ============================================================
-CREATE TABLE request (
-    req_id        UUID           PRIMARY KEY DEFAULT gen_random_uuid(),
-    search_fk     UUID           NOT NULL REFERENCES search(search_id)  ON DELETE RESTRICT,
-    user_fk       UUID           NOT NULL REFERENCES "user"(user_id)    ON DELETE RESTRICT,
-    parent_req_fk UUID                    REFERENCES request(req_id)    ON DELETE SET NULL,
-    status        request_status NOT NULL DEFAULT 'ACTIVE',
-    created_at    TIMESTAMPTZ    NOT NULL DEFAULT NOW()
-);
-
-CREATE INDEX idx_request_created_at   ON request(created_at);
-CREATE INDEX idx_request_user_created ON request(user_fk, created_at);
-
--- ============================================================
--- 5. response
--- ============================================================
-CREATE TABLE response (
-    response_id  UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-    request_fk   UUID        NOT NULL REFERENCES request(req_id)   ON DELETE CASCADE,
-    donor_fk     UUID        NOT NULL REFERENCES "user"(user_id)   ON DELETE RESTRICT,
-    replied      CHAR(1)     NOT NULL CHECK (replied IN ('Y', 'N')),
-    responded_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+CREATE TABLE responses (
+    response_id SERIAL PRIMARY KEY,
+    
+    request_id INT REFERENCES requests(request_id) ON DELETE CASCADE,
+    
+    donor_id VARCHAR(100),  -- from external source (RedCross/WHO)
+    
+    donor_name VARCHAR(100),
+    phone_number VARCHAR(15),
+    
+    blood_group VARCHAR(5),
+    
+    location TEXT,
+    
+    response_status VARCHAR(10) CHECK (response_status IN ('YES', 'NO')),
+    
+    responded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
