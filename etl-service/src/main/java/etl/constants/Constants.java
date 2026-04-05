@@ -16,18 +16,18 @@ public final class Constants {
     public static final String OP_DELETE = "delete";
     public static final String OP_UPSERT = "upsert";
 
-    public static final String WHO_BASE_URL = "http://host.docker.internal:8001";
+    public static final String WHO_BASE_URL = "http://who-service:8082";
     public static final String WHO_INCREMENTAL_ENDPOINT = "/incremental";
     public static final String WHO_SINCE_PARAM = "since";
     public static final String WHO_UNTIL_PARAM = "until";
 
-    public static final String REDCROSS_BASE_URL = "http://host.docker.internal:8002";
+    public static final String REDCROSS_BASE_URL = "http://redcross-service:8081";
     public static final String REDCROSS_INCREMENTAL_ENDPOINT = "/incremental";
     public static final String REDCROSS_SINCE_PARAM = "since";
     public static final String REDCROSS_UNTIL_PARAM = "until";
 
-    public static final String CLICKHOUSE_URL = "http://host.docker.internal:8123";
-    public static final String ELASTIC_URL = "http://host.docker.internal:9200";
+    public static final String CLICKHOUSE_URL = "http://clickhouse:8123";
+    public static final String ELASTIC_URL = "http://elasticsearch:9200";
     public static final String ELASTIC_INDEX_BANKS = "blood-banks";
     public static final String ELASTIC_INDEX_DONORS = "donors";
 
