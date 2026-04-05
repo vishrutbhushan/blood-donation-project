@@ -10,6 +10,8 @@
       "dynamic": "strict",
       "properties": {
         "source": { "type": "keyword" },
+        "blood_bank_id": {"type":"keyword"},
+        "blood_bank_name":{"type":"keyword"},
         "source_record_id": { "type": "keyword" },
         "event_time": { "type": "date" },
         "city": { "type": "keyword" },
