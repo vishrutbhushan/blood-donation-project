@@ -10,6 +10,28 @@ services:
       - "9200:9200"
     volumes:
       - es_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:9200/_cluster/health > /dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  elasticsearch-init:
+    image: curlimages/curl:8.9.1
+    container_name: hemo-elasticsearch-init
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    volumes:
+      - ./elastic search:/elastic-schema:ro
+    command:
+      - /bin/sh
+      - -ec
+      - |
+        curl -s -X PUT "http://elasticsearch:9200/_index_template/bb_inventory_current" -H "Content-Type: application/json" --data-binary @/elastic-schema/bb_inventory.json;
+        curl -s -X PUT "http://elasticsearch:9200/_index_template/donor_availability_current" -H "Content-Type: application/json" --data-binary @/elastic-schema/donor_availability.json;
+        curl -s -X PUT "http://elasticsearch:9200/_index_template/request_events" -H "Content-Type: application/json" --data-binary @/elastic-schema/req_events.json;
+    restart: "no"
 
   kibana:
     image: docker.elastic.co/kibana/kibana:8.15.0
@@ -20,10 +42,39 @@ services:
       - "5601:5601"
     depends_on:
       - elasticsearch
-volumes:
-  es_data:
 
-db:
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.8
+    container_name: hemo-clickhouse
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    volumes:
+      - ch_data:/var/lib/clickhouse
+      - ./Clickhouse/schema_clickhouse.sql:/docker-entrypoint-initdb.d/01_schema_clickhouse.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8123/ping | grep -q Ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  grafana:
+    image: grafana/grafana-oss:11.1.0
+    container_name: hemo-grafana
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_INSTALL_PLUGINS=grafana-clickhouse-datasource
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      - elasticsearch
+      - clickhouse
+
+  db:
     image: postgres:16
     container_name: hemo_db
     restart: unless-stopped
@@ -38,4 +89,7 @@ db:
       - hemo_pgdata:/var/lib/postgresql/data
 
 volumes:
+  es_data:
+  ch_data:
+  grafana_data:
   hemo_pgdata:
