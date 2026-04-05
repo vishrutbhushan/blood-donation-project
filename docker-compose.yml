@@ -20,10 +20,8 @@ services:
       - "5601:5601"
     depends_on:
       - elasticsearch
-volumes:
-  es_data:
 
-db:
+  db:
     image: postgres:16
     container_name: hemo_db
     restart: unless-stopped
@@ -38,4 +36,5 @@ db:
       - hemo_pgdata:/var/lib/postgresql/data
 
 volumes:
+  es_data:
   hemo_pgdata:
