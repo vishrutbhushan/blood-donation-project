@@ -9,6 +9,7 @@ Star schema aligned to source-of-truth systems:
 DROP VIEW IF EXISTS blood_ops.mv_ingestion_hourly_to_fact;
 
 DROP TABLE IF EXISTS blood_ops.fact_ingestion_event;
+DROP TABLE IF EXISTS blood_ops.source_ingestion_hourly_agg;
 DROP TABLE IF EXISTS blood_ops.fact_donor_snapshot;
 DROP TABLE IF EXISTS blood_ops.fact_inventory_snapshot;
 
@@ -173,11 +174,29 @@ ENGINE = SummingMergeTree
 PARTITION BY toYYYYMM(toDate(event_time_id))
 ORDER BY (event_date_id, source_id, api_name, record_type);
 
-CREATE TABLE IF NOT EXISTS blood_ops.fact_inventory_snapshot_all AS blood_ops.fact_inventory_snapshot
-ENGINE = Distributed(hemo_cluster, blood_ops, fact_inventory_snapshot, rand());
+-- Hourly aggregation table for ingestion events (source for materialized view)
+CREATE TABLE IF NOT EXISTS blood_ops.source_ingestion_hourly_agg (
+    event_hour DateTime,
+    source LowCardinality(String),
+    api_name LowCardinality(String),
+    record_type LowCardinality(String),
+    record_count UInt64
+)
+ENGINE = SummingMergeTree
+PARTITION BY toYYYYMM(toDate(event_hour))
+ORDER BY (event_hour, source, api_name, record_type);
 
-CREATE TABLE IF NOT EXISTS blood_ops.fact_donor_snapshot_all AS blood_ops.fact_donor_snapshot
-ENGINE = Distributed(hemo_cluster, blood_ops, fact_donor_snapshot, rand());
-
-CREATE TABLE IF NOT EXISTS blood_ops.fact_ingestion_event_all AS blood_ops.fact_ingestion_event
-ENGINE = Distributed(hemo_cluster, blood_ops, fact_ingestion_event, rand());
+CREATE MATERIALIZED VIEW IF NOT EXISTS blood_ops.mv_ingestion_hourly_to_fact
+TO blood_ops.fact_ingestion_event
+AS
+SELECT
+    toUInt32(toUnixTimestamp(event_hour)) AS event_time_id,
+    toUInt32(toYYYYMMDD(toDate(event_hour))) AS event_date_id,
+    multiIf(source = 'redcross', 1, source = 'who', 2, 0) AS source_id,
+    api_name,
+    record_type,
+    sum(record_count) AS success_count,
+    toUInt64(0) AS error_count,
+    sum(record_count) AS total_count
+FROM blood_ops.source_ingestion_hourly_agg
+GROUP BY event_time_id, event_date_id, source_id, api_name, record_type;

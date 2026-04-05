@@ -15,10 +15,13 @@ datasources:
   - name: ClickHouse
     type: grafana-clickhouse-datasource
     access: proxy
-    url: http://clickhouse:8123
+    url: http://clickhouse:9000
     editable: true
     jsonData:
       defaultDatabase: blood_ops
       username: default
-      port: 8123
+      port: 9000
+      protocol: native
       server: clickhouse
+    secureJsonData:
+      password: clickhouse
