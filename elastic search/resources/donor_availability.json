@@ -15,7 +15,7 @@
         "blood_group": { "type": "keyword" },
         "location": { "type": "geo_point" },
         "last_donated_at": { "type": "date" },
-        "availability_status": { "type": "keyword" }
+        "availability_status": { "type": "boolean" }
       }
     }
   }
