@@ -8,6 +8,9 @@ import com.hemo.backend.exception.ResourceNotFoundException;
 import com.hemo.backend.repository.RequestRepository;
 import com.hemo.backend.repository.SearchRepository;
 import lombok.RequiredArgsConstructor;
+import java.util.List;
+import java.util.Map;
+
 
 
 @Service
@@ -44,4 +47,18 @@ public class RequestService {
 
         return requestRepository.save(newReq);
     }
+
+    public List<Map<String, Object>> getUserRequestHistory(Long userId) {
+
+    return requestRepository.findBySearchUserUserId(userId)
+            .stream()
+            .map(r -> Map.<String, Object>of(
+                    "request_id", r.getRequestId(),
+                    "blood_group", r.getBloodGroup(),
+                    "component", r.getComponent(),
+                    "status", r.getStatus()
+            ))
+            .toList();
+}
+
 }

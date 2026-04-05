@@ -8,6 +8,7 @@ import com.hemo.backend.entity.Request;
 import com.hemo.backend.exception.ResourceNotFoundException;
 import com.hemo.backend.repository.RequestRepository;
 import com.hemo.backend.repository.ResponseRepository;
+import java.util.List;
 
 
 
@@ -34,4 +35,9 @@ public class ResponseService {
 
         return responseRepository.save(response);
     }
+
+    public List<Response> getResponsesByRequest(Long requestId) {
+    return responseRepository.findByRequestRequestId(requestId);
+}
+
 }
