@@ -23,7 +23,7 @@ services:
       elasticsearch:
         condition: service_healthy
     volumes:
-      - ./elastic search:/elastic-schema:ro
+      - ./elastic search/resources:/elastic-schema:ro
     command:
       - /bin/sh
       - -ec
@@ -33,15 +33,53 @@ services:
         curl -s -X PUT "http://elasticsearch:9200/_index_template/request_events" -H "Content-Type: application/json" --data-binary @/elastic-schema/req_events.json;
     restart: "no"
 
-  kibana:
-    image: docker.elastic.co/kibana/kibana:8.15.0
-    container_name: hemo-kibana
+  backend:
+    build:
+      context: ./backend
+    container_name: hemo-backend
     environment:
-      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/bloodbank
+      SPRING_DATASOURCE_USERNAME: hemo_user
+      SPRING_DATASOURCE_PASSWORD: hemo_pass
+      ELASTICSEARCH_URL: http://elasticsearch:9200
     ports:
-      - "5601:5601"
+      - "8080:8080"
     depends_on:
-      - elasticsearch
+      db:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+
+  redcross-db:
+    image: postgres:16
+    container_name: redcross-db
+    environment:
+      POSTGRES_DB: redcross_db
+      POSTGRES_USER: redcross_user
+      POSTGRES_PASSWORD: redcross_pass
+    ports:
+      - "5433:5432"
+    volumes:
+      - ./Redcross/src/main/resources/sourcetables.sql:/docker-entrypoint-initdb.d/01_schema.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U redcross_user -d redcross_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  redcross-service:
+    build:
+      context: ./Redcross
+    container_name: redcross-service
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://redcross-db:5432/redcross_db
+      SPRING_DATASOURCE_USERNAME: redcross_user
+      SPRING_DATASOURCE_PASSWORD: redcross_pass
+    ports:
+      - "8081:8081"
+    depends_on:
+      redcross-db:
+        condition: service_healthy
 
   clickhouse:
     image: clickhouse/clickhouse-server:24.8
@@ -51,7 +89,7 @@ services:
       - "9000:9000"
     volumes:
       - ch_data:/var/lib/clickhouse
-      - ./Clickhouse/schema_clickhouse.sql:/docker-entrypoint-initdb.d/01_schema_clickhouse.sql:ro
+      - ./Clickhouse/resources/schema_clickhouse.sql:/docker-entrypoint-initdb.d/01_schema_clickhouse.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8123/ping | grep -q Ok"]
       interval: 10s
@@ -74,6 +112,46 @@ services:
       - elasticsearch
       - clickhouse
 
+  frontend:
+    build:
+      context: ./frontend
+    container_name: hemo-frontend
+    ports:
+      - "3001:80"
+    depends_on:
+      - backend
+
+  who-db:
+    image: postgres:16
+    container_name: who-db
+    environment:
+      POSTGRES_DB: who_db
+      POSTGRES_USER: who_user
+      POSTGRES_PASSWORD: who_pass
+    ports:
+      - "5434:5432"
+    volumes:
+      - ./who/src/main/resources/source_coder.sql:/docker-entrypoint-initdb.d/01_schema.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U who_user -d who_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  who-service:
+    build:
+      context: ./who
+    container_name: who-service
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://who-db:5432/who_db
+      SPRING_DATASOURCE_USERNAME: who_user
+      SPRING_DATASOURCE_PASSWORD: who_pass
+    ports:
+      - "8082:8082"
+    depends_on:
+      who-db:
+        condition: service_healthy
+
   db:
     image: postgres:16
     container_name: hemo_db
@@ -85,8 +163,13 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - ./schema.sql:/docker-entrypoint-initdb.d/01_schema.sql
+      - ./backend/src/main/resources/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql
       - hemo_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hemo_user -d bloodbank"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
 
 volumes:
   es_data:
