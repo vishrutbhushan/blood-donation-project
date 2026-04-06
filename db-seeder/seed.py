@@ -8,23 +8,28 @@ Usage:
     python3 seed.py
 
 Scale control:
-    SCALE = 1   ->  25 blood banks per source  (~sample)
-    SCALE = 2   ->  50 blood banks per source
-    SCALE = 10  ->  250 blood banks per source
+    BANKS_PER_RUN  = 500        ->  500 new blood banks per run
+    DONORS_PER_RUN = 1_000_000  ->  1 million new donors per run
 
-Running again does a clean wipe first so data is never duplicated.
+Runs APPEND — data is never wiped. Each donor gets a guaranteed-unique
+UUID-based identifier so re-runs never produce duplicates.
+Run once → ~1 M records. Run 10× → ~10 M records.
 """
 
 import hashlib
 import random
-from datetime import date, timedelta
+import uuid
+from datetime import date, datetime, timedelta
 
 import psycopg2
+from psycopg2.extras import execute_values
 
 # ---------------------------------------------------------------------------
-# SCALE <- change this to grow the dataset
+# Tune per run — adjust without restarting Docker
 # ---------------------------------------------------------------------------
-SCALE = 1
+BANKS_PER_RUN  = 500          # new blood banks to insert each invocation
+DONORS_PER_RUN = 1_000_000    # new donors to insert each invocation
+BATCH_SIZE     = 10_000       # rows per executemany batch (keeps memory bounded)
 
 # ---------------------------------------------------------------------------
 # DB connections -- ports from docker-compose.yml
@@ -266,7 +271,7 @@ WHO_NAME_TEMPLATES = [
 
 DEITIES    = ["Sai Baba", "Venkateshwara", "Lakshmi", "Durga", "Ram", "Hanuman", "Tirupati"]
 TRUSTS     = ["Seva", "Jeevan", "Asha", "Raksha", "Kalyan", "Prabhat", "Sanjeevani"]
-CATEGORIES = ["Government", "Private", "Charitable", "Trust", "Medical College"]
+CATEGORIES = ["Hospital", "Blood Bank", "NGO", "Others"]
 
 STREET_TYPES = ["Main Road", "Cross Road", "Ring Road", "Hospital Road",
                 "MG Road", "Station Road", "Market Road", "Bypass Road"]
@@ -345,10 +350,51 @@ def rnd_date_past(max_days):
     return date.today() - timedelta(days=random.randint(30, max_days))
 
 
-def aadhaar_hash(seed):
-    """SHA-256 of a fake 12-digit Aadhaar. Raw number is never stored."""
-    fake = f"{random.randint(1000,9999)}{random.randint(1000,9999)}{random.randint(1000,9999)}"
-    return hashlib.sha256((seed + fake).encode()).hexdigest()
+def rnd_dt_between(start: date, end: date) -> datetime:
+    """Uniform random datetime between two dates."""
+    delta = (end - start).days
+    if delta < 1:
+        delta = 1
+    d = start + timedelta(days=random.randint(0, delta - 1))
+    return datetime(d.year, d.month, d.day,
+                    random.randint(0, 23), random.randint(0, 59), random.randint(0, 59))
+
+
+def rnd_donor_created_at(age: int) -> datetime:
+    """
+    Registration date is after the person turned 18 (can't donate earlier).
+    Older donors skew towards earlier registration; capped at 12 years back.
+    """
+    today = date.today()
+    # earliest they could have registered = when they turned 18
+    birth_year   = today.year - age
+    turned_18    = date(birth_year + 18, random.randint(1, 12), random.randint(1, 28))
+    twelve_ago   = date(today.year - 12, today.month, today.day)
+    earliest     = max(turned_18, twelve_ago)
+    # leave at least 30 days gap so updated_at has room
+    latest       = today - timedelta(days=30)
+    if earliest >= latest:
+        earliest = latest - timedelta(days=60)
+    return rnd_dt_between(earliest, latest)
+
+
+def rnd_updated_at(created_at: datetime) -> datetime:
+    """Random datetime between created_at and today (record could have been updated any time)."""
+    return rnd_dt_between(created_at.date(), date.today())
+
+
+def rnd_bank_created_at() -> datetime:
+    """Blood banks were established 2-20 years ago."""
+    today    = date.today()
+    years    = random.randint(2, 20)
+    earliest = date(today.year - years, 1, 1)
+    latest   = today - timedelta(days=90)
+    return rnd_dt_between(earliest, latest)
+
+
+def unique_id():
+    """Guaranteed-unique identifier — SHA-256 of a UUID4. Safe across unlimited re-runs."""
+    return hashlib.sha256(uuid.uuid4().bytes).hexdigest()
 
 
 def pick_city():
@@ -392,20 +438,7 @@ def full_name():
     return f"{random.choice(pool)} {random.choice(LAST_NAMES)}"
 
 
-def banks_per_run():
-    return max(25, 25 * SCALE)
-
-
-# ---------------------------------------------------------------------------
-# Clean slate -- truncate before each run so re-runs are idempotent
-# ---------------------------------------------------------------------------
-
-def truncate_all(conn, label):
-    cur = conn.cursor()
-    cur.execute("TRUNCATE TABLE blood_donor, blood_inventory, blood_bank RESTART IDENTITY CASCADE")
-    conn.commit()
-    cur.close()
-    print(f"[{label}] Tables truncated -- fresh start.")
+# (banks_per_run removed — use BANKS_PER_RUN constant directly)
 
 
 # ---------------------------------------------------------------------------
@@ -413,14 +446,11 @@ def truncate_all(conn, label):
 # ---------------------------------------------------------------------------
 
 def seed_redcross(conn):
-    truncate_all(conn, "Red Cross")
-    cur       = conn.cursor()
-    n_banks   = banks_per_run()
-    total_inv = total_donors = 0
+    cur = conn.cursor()
+    inv_rows = []
 
-    print(f"[Red Cross] Inserting {n_banks} blood banks ...")
-
-    for _ in range(n_banks):
+    print(f"[Red Cross] Inserting {BANKS_PER_RUN} new banks ...")
+    for _ in range(BANKS_PER_RUN):
         city, state, _w, pincodes = pick_city()
         postal   = random.choice(pincodes)
         name     = make_bank_name(city, REDCROSS_NAME_TEMPLATES)
@@ -428,52 +458,71 @@ def seed_redcross(conn):
         email    = rnd_email(name)
         category = random.choice(CATEGORIES)
         address  = rnd_address(city, state, postal)
+        bank_cat = rnd_bank_created_at()
+        bank_uat = rnd_updated_at(bank_cat)
 
         cur.execute(
             """
             INSERT INTO blood_bank
-                (name, category, contact_number, email, full_address, postal_code)
-            VALUES (%s, %s, %s, %s, %s, %s)
+                (name, category, contact_number, email, full_address, postal_code,
+                 created_at, updated_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING bb_id
             """,
-            (name, category, phone, email, address, postal),
+            (name, category, phone, email, address, postal, bank_cat, bank_uat),
         )
         bb_id = cur.fetchone()[0]
 
-        # Inventory: realistic quantities per blood group x component
         for bg in BLOOD_GROUPS:
             for comp in REDCROSS_COMPONENTS:
-                cur.execute(
-                    "INSERT INTO blood_inventory (bb_id, blood_group, component, quantity) VALUES (%s,%s,%s,%s)",
-                    (bb_id, bg, comp, inventory_qty(bg, comp)),
-                )
-        total_inv += len(BLOOD_GROUPS) * len(REDCROSS_COMPONENTS)
+                inv_rows.append((bb_id, bg, comp, inventory_qty(bg, comp), rnd_updated_at(bank_cat)))
 
-        # Donors: skewed count per bank
-        n_donors = donors_for_bank()
-        for _ in range(n_donors):
+    execute_values(
+        cur,
+        "INSERT INTO blood_inventory (bb_id, blood_group, component, quantity, updated_at) VALUES %s",
+        inv_rows,
+    )
+    conn.commit()
+    print(f"[Red Cross] {BANKS_PER_RUN} banks + {len(inv_rows)} inventory rows committed.")
+
+    # Spread donors across ALL banks in the DB (including from prior runs)
+    cur.execute("SELECT bb_id FROM blood_bank")
+    all_bb_ids = [row[0] for row in cur.fetchall()]
+    print(f"[Red Cross] Total banks in DB: {len(all_bb_ids)} — inserting {DONORS_PER_RUN:,} donors ...")
+
+    inserted = 0
+    while inserted < DONORS_PER_RUN:
+        batch_n = min(BATCH_SIZE, DONORS_PER_RUN - inserted)
+        batch = []
+        for _ in range(batch_n):
+            bb_id    = random.choice(all_bb_ids)
+            city, state, _w, pincodes = pick_city()
+            postal   = random.choice(pincodes)
             fname    = full_name()
-            nat_id   = aadhaar_hash(fname + postal)
+            nat_id   = unique_id()
             b_type   = pick_blood_group()
-            age      = random.randint(18, 65)  # NBTC eligibility: 18-65
+            age      = random.randint(18, 65)
             last_don = rnd_date_past(3 * 365)
             contact  = rnd_mobile()
             daddr    = rnd_address(city, state, postal)
+            d_cat    = rnd_donor_created_at(age)
+            d_uat    = rnd_updated_at(d_cat)
+            batch.append((bb_id, fname, nat_id, contact, daddr, b_type, age, last_don, d_cat, d_uat))
 
-            cur.execute(
-                """
-                INSERT INTO blood_donor
-                    (bb_id, full_name, national_id, contact_number, address,
-                     blood_type, age, last_donation_date)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
-                """,
-                (bb_id, fname, nat_id, contact, daddr, b_type, age, last_don),
-            )
-        total_donors += n_donors
+        execute_values(
+            cur,
+            """INSERT INTO blood_donor
+               (bb_id, full_name, national_id, contact_number, address,
+                blood_type, age, last_donation_date, created_at, updated_at)
+               VALUES %s""",
+            batch,
+        )
+        conn.commit()
+        inserted += batch_n
+        print(f"  [Red Cross] donors: {inserted:,} / {DONORS_PER_RUN:,}", end="\r", flush=True)
 
-    conn.commit()
     cur.close()
-    print(f"[Red Cross] Done -- {n_banks} banks | {total_inv} inventory rows | {total_donors} donors")
+    print(f"\n[Red Cross] Done — {BANKS_PER_RUN} new banks | {len(inv_rows)} inventory rows | {DONORS_PER_RUN:,} new donors")
 
 
 # ---------------------------------------------------------------------------
@@ -481,14 +530,11 @@ def seed_redcross(conn):
 # ---------------------------------------------------------------------------
 
 def seed_who(conn):
-    truncate_all(conn, "WHO")
-    cur       = conn.cursor()
-    n_banks   = banks_per_run()
-    total_inv = total_donors = 0
+    cur = conn.cursor()
+    inv_rows = []
 
-    print(f"[WHO] Inserting {n_banks} blood banks ...")
-
-    for _ in range(n_banks):
+    print(f"[WHO] Inserting {BANKS_PER_RUN} new banks ...")
+    for _ in range(BANKS_PER_RUN):
         city, state, _w, pincodes = pick_city()
         pincode  = random.choice(pincodes)
         name     = make_bank_name(city, WHO_NAME_TEMPLATES)
@@ -496,51 +542,70 @@ def seed_who(conn):
         email    = rnd_email(name)
         category = random.choice(CATEGORIES)
         street   = rnd_street(city)
+        bank_cat = rnd_bank_created_at()
+        bank_uat = rnd_updated_at(bank_cat)
 
         cur.execute(
             """
             INSERT INTO blood_bank
-                (name, category, phone, email, street, city, state, pincode)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
+                (name, category, phone, email, street, city, state, pincode,
+                 created_at, updated_at)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
             RETURNING bb_id
             """,
-            (name, category, phone, email, street, city, state, pincode),
+            (name, category, phone, email, street, city, state, pincode, bank_cat, bank_uat),
         )
         bb_id = cur.fetchone()[0]
 
-        # Inventory
         for bg in BLOOD_GROUPS:
             for comp in WHO_COMPONENTS:
-                cur.execute(
-                    "INSERT INTO blood_inventory (bb_id, blood_group, component_type, units_available) VALUES (%s,%s,%s,%s)",
-                    (bb_id, bg, comp, inventory_qty(bg, comp)),
-                )
-        total_inv += len(BLOOD_GROUPS) * len(WHO_COMPONENTS)
+                inv_rows.append((bb_id, bg, comp, inventory_qty(bg, comp), rnd_updated_at(bank_cat)))
 
-        # Donors
-        n_donors = donors_for_bank()
-        for _ in range(n_donors):
+    execute_values(
+        cur,
+        "INSERT INTO blood_inventory (bb_id, blood_group, component_type, units_available, last_updated) VALUES %s",
+        inv_rows,
+    )
+    conn.commit()
+    print(f"[WHO] {BANKS_PER_RUN} banks + {len(inv_rows)} inventory rows committed.")
+
+    # Spread donors across ALL banks in the DB (including from prior runs)
+    cur.execute("SELECT bb_id FROM blood_bank")
+    all_bb_ids = [row[0] for row in cur.fetchall()]
+    print(f"[WHO] Total banks in DB: {len(all_bb_ids)} — inserting {DONORS_PER_RUN:,} donors ...")
+
+    inserted = 0
+    while inserted < DONORS_PER_RUN:
+        batch_n = min(BATCH_SIZE, DONORS_PER_RUN - inserted)
+        batch = []
+        for _ in range(batch_n):
+            bb_id    = random.choice(all_bb_ids)
+            city, state, _w, pincodes = pick_city()
+            pincode  = random.choice(pincodes)
             fname    = full_name()
-            a_hash   = aadhaar_hash(fname + pincode)
+            a_hash   = unique_id()
             bg       = pick_blood_group()
             age      = random.randint(18, 65)
             last_don = rnd_date_past(3 * 365)
             phone_d  = rnd_mobile()
+            d_cat    = rnd_donor_created_at(age)
+            d_uat    = rnd_updated_at(d_cat)
+            batch.append((bb_id, fname, a_hash, phone_d, city, state, pincode, bg, age, last_don, d_cat, d_uat))
 
-            cur.execute(
-                """
-                INSERT INTO blood_donor
-                    (bb_id, name, aadhaar_hash, phone, city, state, pincode,
-                     blood_group, age, last_donated)
-                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-                """,
-                (bb_id, fname, a_hash, phone_d, city, state, pincode, bg, age, last_don),
-            )
-        total_donors += n_donors
+        execute_values(
+            cur,
+            """INSERT INTO blood_donor
+               (bb_id, name, aadhaar_hash, phone, city, state, pincode,
+                blood_group, age, last_donated, created_at, updated_at)
+               VALUES %s""",
+            batch,
+        )
+        conn.commit()
+        inserted += batch_n
+        print(f"  [WHO] donors: {inserted:,} / {DONORS_PER_RUN:,}", end="\r", flush=True)
 
-    conn.commit()
     cur.close()
-    print(f"[WHO] Done -- {n_banks} banks | {total_inv} inventory rows | {total_donors} donors")
+    print(f"\n[WHO] Done — {BANKS_PER_RUN} new banks | {len(inv_rows)} inventory rows | {DONORS_PER_RUN:,} new donors")
 
 
 # ---------------------------------------------------------------------------
@@ -548,7 +613,7 @@ def seed_who(conn):
 # ---------------------------------------------------------------------------
 
 def main():
-    print(f"Realistic DB seeder  (SCALE={SCALE})\n")
+    print(f"Realistic DB seeder  (BANKS_PER_RUN={BANKS_PER_RUN}, DONORS_PER_RUN={DONORS_PER_RUN:,})\n")
 
     try:
         rc_conn = psycopg2.connect(**REDCROSS_DSN)
