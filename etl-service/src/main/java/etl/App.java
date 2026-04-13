@@ -136,12 +136,13 @@ public class App {
     private List<BloodBank> mergeLatestBanks(List<BloodBank> records) {
         Map<String, BloodBank> merged = new LinkedHashMap<>();
         for (BloodBank r : records) {
-            if (r.getBankId() == null) {
+            if (r.getBankId() == null || r.getSource() == null) {
                 continue;
             }
-            BloodBank existing = merged.get(r.getBankId());
+            String key = r.getSource() + ":" + r.getBankId();
+            BloodBank existing = merged.get(key);
             if (existing == null || !TimeUtil.toDateTime(r.getUpdatedAt()).isBefore(TimeUtil.toDateTime(existing.getUpdatedAt()))) {
-                merged.put(r.getBankId(), r);
+                merged.put(key, r);
             }
         }
         return new ArrayList<>(merged.values());
@@ -150,12 +151,13 @@ public class App {
     private List<Donor> mergeLatestDonors(List<Donor> records) {
         Map<String, Donor> merged = new LinkedHashMap<>();
         for (Donor r : records) {
-            if (r.getDonorId() == null) {
+            if (r.getDonorId() == null || r.getSource() == null) {
                 continue;
             }
-            Donor existing = merged.get(r.getDonorId());
+            String key = r.getSource() + ":" + r.getDonorId();
+            Donor existing = merged.get(key);
             if (existing == null || !TimeUtil.toDateTime(r.getUpdatedAt()).isBefore(TimeUtil.toDateTime(existing.getUpdatedAt()))) {
-                merged.put(r.getDonorId(), r);
+                merged.put(key, r);
             }
         }
         return new ArrayList<>(merged.values());
@@ -164,13 +166,16 @@ public class App {
     private List<Donor> resolveFk(List<Donor> donors, List<BloodBank> banks) {
         Map<String, String> bankByName = new HashMap<>();
         for (BloodBank b : banks) {
-            if (b.getBankName() != null && b.getBankId() != null) {
-                bankByName.put(b.getBankName(), b.getBankId());
+            if (b.getSource() != null && b.getBankName() != null && b.getBankId() != null) {
+                bankByName.put(b.getSource() + ":" + b.getBankName(), b.getBankId());
             }
         }
         for (Donor d : donors) {
-            if (d.getLastDonatedBloodBank() != null && bankByName.containsKey(d.getLastDonatedBloodBank())) {
-                d.setBankId(bankByName.get(d.getLastDonatedBloodBank()));
+            if (d.getSource() != null && d.getLastDonatedBloodBank() != null) {
+                String key = d.getSource() + ":" + d.getLastDonatedBloodBank();
+                if (bankByName.containsKey(key)) {
+                    d.setBankId(bankByName.get(key));
+                }
             }
         }
         return donors;

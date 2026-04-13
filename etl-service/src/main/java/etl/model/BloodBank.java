@@ -10,13 +10,17 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class BloodBank {
+    private String source;
     private String bankId;
     private String bankName;
+    private String category;
     private String address;
     private String city;
     private String state;
     private String pincode;
     private String phone;
+    private String email;
+    private String createdAt;
     private Double lat;
     private Double lon;
     private String updatedAt;

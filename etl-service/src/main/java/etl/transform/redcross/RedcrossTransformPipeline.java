@@ -63,18 +63,24 @@ public class RedcrossTransformPipeline {
         String bankName = required(raw, BANK_FIELDS.get("bank_name"));
         String pincode = required(raw, BANK_FIELDS.get("pincode"));
         Double[] geo = geo(pincode, geoMap);
+        String updatedAt = TimeUtil.formatStore(required(raw, BANK_FIELDS.get("updated")));
+        String createdAt = optional(raw, "created_at");
         String op = truthy(raw.get("deleted")) || truthy(raw.get("is_deleted")) ? Constants.OP_DELETE : Constants.OP_UPSERT;
         return BloodBank.builder()
+            .source(Constants.SOURCE_REDCROSS)
                 .bankId(bankId)
                 .bankName(bankName)
+            .category(optional(raw, "category"))
                 .address(optional(raw, BANK_FIELDS.get("address")))
                 .city(optional(raw, BANK_FIELDS.get("city")))
                 .state(optional(raw, BANK_FIELDS.get("state")))
                 .pincode(pincode)
                 .phone(optional(raw, BANK_FIELDS.get("phone")))
+            .email(optional(raw, "email"))
+            .createdAt(createdAt == null ? updatedAt : TimeUtil.formatStore(createdAt))
                 .lat(geo[0])
                 .lon(geo[1])
-                .updatedAt(TimeUtil.formatStore(required(raw, BANK_FIELDS.get("updated"))))
+            .updatedAt(updatedAt)
                 .op(op)
                 .build();
     }
@@ -85,11 +91,14 @@ public class RedcrossTransformPipeline {
         String bloodGroup = required(raw, DONOR_FIELDS.get("blood_group"));
         String pincode = required(raw, DONOR_FIELDS.get("pincode_current"));
         Double[] geo = geo(pincode, geoMap);
+        String updatedAt = TimeUtil.formatStore(required(raw, DONOR_FIELDS.get("updated")));
         String op = truthy(raw.get("deleted")) || truthy(raw.get("is_deleted")) ? Constants.OP_DELETE : Constants.OP_UPSERT;
         return Donor.builder()
+            .source(Constants.SOURCE_REDCROSS)
                 .donorId(donorId)
                 .name(name)
                 .bloodGroup(bloodGroup)
+            .age(toInteger(raw.get("age")))
                 .phone(optional(raw, DONOR_FIELDS.get("phone")))
                 .email(optional(raw, DONOR_FIELDS.get("email")))
                 .addressCurrent(optional(raw, DONOR_FIELDS.get("address_current")))
@@ -101,7 +110,7 @@ public class RedcrossTransformPipeline {
                 .bankId(optional(raw, DONOR_FIELDS.get("bank_id")))
                 .lastDonatedOn(optional(raw, DONOR_FIELDS.get("last_donated_on")))
                 .lastDonatedBloodBank(optional(raw, DONOR_FIELDS.get("last_donated_blood_bank")))
-                .updatedAt(TimeUtil.formatStore(required(raw, DONOR_FIELDS.get("updated"))))
+                .updatedAt(updatedAt)
                 .op(op)
                 .build();
     }
@@ -151,6 +160,20 @@ public class RedcrossTransformPipeline {
             throw new RuntimeException("geo value must be numeric");
         }
         return ((Number) v).doubleValue();
+    }
+
+    private Integer toInteger(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof Number) {
+            return ((Number) value).intValue();
+        }
+        String text = String.valueOf(value).trim();
+        if (text.isEmpty()) {
+            return null;
+        }
+        return Integer.parseInt(text);
     }
 
     private List<Map<String, Object>> list(Object value) {

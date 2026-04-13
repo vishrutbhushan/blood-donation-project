@@ -26,4 +26,14 @@ public class UserService {
         return userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
     }
+
+    public User getUserByPhone(String phone) {
+        return userRepository.findByPhone(phone)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+    }
+
+    public User getOrCreateUser(UserDTO dto) {
+        return userRepository.findByPhone(dto.getPhone())
+                .orElseGet(() -> createUser(dto));
+    }
 }

@@ -253,6 +253,22 @@ services:
       who-db:
         condition: service_healthy
 
+  etl-service:
+    build:
+      context: ./etl-service
+    container_name: etl-service
+    depends_on:
+      who-service:
+        condition: service_started
+      redcross-service:
+        condition: service_started
+      clickhouse:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+    volumes:
+      - etl_data:/data
+
 volumes:
   pg_primary_data:
   pg_replica_data:
@@ -263,3 +279,4 @@ volumes:
   ch_data_2:
   ch_data_3:
   grafana_data:
+  etl_data:

@@ -169,8 +169,8 @@ public class WhoRepository {
 
     public List<Map<String, Object>> fetchEtlBanks(long since, long until) {
         String sql =
-                "SELECT bb.bb_id, bb.name, bb.street, bb.city, bb.state, bb.pincode, "
-                + "bb.phone, bb.updated_at "
+                "SELECT bb.bb_id, bb.name, bb.category, bb.street, bb.city, bb.state, bb.pincode, "
+                + "bb.phone, bb.email, bb.created_at, bb.updated_at "
                 + "FROM blood_bank bb "
                 + "WHERE bb.updated_at >= to_timestamp(? / 1000.0) "
                 + "  AND bb.updated_at < to_timestamp(? / 1000.0) "
@@ -182,11 +182,16 @@ public class WhoRepository {
                     Map<String, Object> m = new LinkedHashMap<>();
                     m.put("bank_id", String.valueOf(rs.getLong("bb_id")));
                     m.put("bank_name", rs.getString("name"));
+                        m.put("category", rs.getString("category"));
                     m.put("address", rs.getString("street"));
                     m.put("city", rs.getString("city"));
                     m.put("state", rs.getString("state"));
                     m.put("pincode", rs.getString("pincode"));
                     m.put("phone", rs.getString("phone"));
+                        m.put("email", rs.getString("email"));
+                        Timestamp createdTs = rs.getTimestamp("created_at");
+                        m.put("created_at",
+                            createdTs != null ? createdTs.toLocalDateTime().format(STORE_FMT) : null);
                     Timestamp ts = rs.getTimestamp("updated_at");
                     m.put("update_time",
                             ts != null ? ts.toLocalDateTime().format(STORE_FMT) : null);
@@ -197,7 +202,7 @@ public class WhoRepository {
 
     public List<Map<String, Object>> fetchEtlDonors(long since, long until) {
         String sql =
-                "SELECT d.donor_id, d.name, d.blood_group, d.phone, "
+                "SELECT d.donor_id, d.name, d.blood_group, d.phone, d.age, "
                 + "d.city, d.state, d.pincode, d.last_donated, d.updated_at, "
                 + "CAST(d.bb_id AS TEXT) AS bb_id_str "
                 + "FROM blood_donor d "
@@ -212,6 +217,7 @@ public class WhoRepository {
                     m.put("donor_id", String.valueOf(rs.getLong("donor_id")));
                     m.put("name", rs.getString("name"));
                     m.put("blood_group", rs.getString("blood_group"));
+                    m.put("age", rs.getInt("age"));
                     m.put("phone", rs.getString("phone"));
                     m.put("email", null);
                     m.put("address_current", null);

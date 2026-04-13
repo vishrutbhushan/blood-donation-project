@@ -28,10 +28,11 @@ For local host access, the application and PostgreSQL services are published on 
 
 ## Proxies
 
-There is no reverse proxy layer in the current stack.
+The frontend container uses Nginx as a lightweight reverse proxy for the API routes.
 
-- No Nginx, Traefik, or API gateway sits in front of the services.
-- Containers talk to each other directly by service name.
+- The frontend is published on port `3001` and serves the compiled UI from `frontend/`.
+- Nginx forwards `/api/backend`, `/api/who`, and `/api/redcross` to the respective services by Docker DNS name.
+- Containers still talk to each other directly by service name inside the Compose network.
 - The ETL service should use Docker service DNS names when it runs in the stack network.
 
 ## Where Data Lives

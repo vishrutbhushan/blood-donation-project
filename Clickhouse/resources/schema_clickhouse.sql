@@ -171,7 +171,7 @@ CREATE TABLE IF NOT EXISTS blood_ops.fact_ingestion_event (
     total_count UInt64
 )
 ENGINE = SummingMergeTree
-PARTITION BY toYYYYMM(toDate(event_time_id))
+PARTITION BY toYYYYMM(toDateTime(event_time_id))
 ORDER BY (event_date_id, source_id, api_name, record_type);
 
 -- Hourly aggregation table for ingestion events (source for materialized view)

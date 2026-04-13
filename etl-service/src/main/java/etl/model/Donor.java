@@ -10,9 +10,11 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class Donor {
+    private String source;
     private String donorId;
     private String name;
     private String bloodGroup;
+    private Integer age;
     private String phone;
     private String email;
     private String addressCurrent;

@@ -164,8 +164,8 @@ public class RedcrossRepository {
 
     public List<Map<String, Object>> fetchEtlBanks(long since, long until) {
         String sql =
-                "SELECT bb.bb_id, bb.name, bb.full_address, bb.postal_code, "
-                + "bb.contact_number, bb.updated_at "
+                "SELECT bb.bb_id, bb.name, bb.category, bb.full_address, bb.postal_code, "
+                + "bb.contact_number, bb.email, bb.created_at, bb.updated_at "
                 + "FROM blood_bank bb "
                 + "WHERE bb.updated_at >= to_timestamp(? / 1000.0) "
                 + "  AND bb.updated_at < to_timestamp(? / 1000.0) "
@@ -177,11 +177,16 @@ public class RedcrossRepository {
                     Map<String, Object> m = new LinkedHashMap<>();
                     m.put("bank_id", String.valueOf(rs.getLong("bb_id")));
                     m.put("bank_name", rs.getString("name"));
+                        m.put("category", rs.getString("category"));
                     m.put("address", rs.getString("full_address"));
                     m.put("city", null);
                     m.put("state", null);
                     m.put("pincode", rs.getString("postal_code"));
                     m.put("phone", rs.getString("contact_number"));
+                        m.put("email", rs.getString("email"));
+                        Timestamp createdTs = rs.getTimestamp("created_at");
+                        m.put("created_at",
+                            createdTs != null ? createdTs.toLocalDateTime().format(STORE_FMT) : null);
                     Timestamp ts = rs.getTimestamp("updated_at");
                     m.put("update_time",
                             ts != null ? ts.toLocalDateTime().format(STORE_FMT) : null);
@@ -193,7 +198,7 @@ public class RedcrossRepository {
     public List<Map<String, Object>> fetchEtlDonors(long since, long until) {
         // Join to blood_bank to get postal_code as pincode_current (donors lack a separate pincode)
         String sql =
-                "SELECT d.donor_id, d.full_name, d.blood_type, d.contact_number, "
+                "SELECT d.donor_id, d.full_name, d.blood_type, d.contact_number, d.age, "
                 + "d.address, d.last_donation_date, d.updated_at, "
                 + "CAST(d.bb_id AS TEXT) AS bb_id_str, b.postal_code "
                 + "FROM blood_donor d "
@@ -209,6 +214,7 @@ public class RedcrossRepository {
                     m.put("donor_id", String.valueOf(rs.getLong("donor_id")));
                     m.put("name", rs.getString("full_name"));
                     m.put("blood_group", rs.getString("blood_type"));
+                    m.put("age", rs.getInt("age"));
                     m.put("phone", rs.getString("contact_number"));
                     m.put("email", null);
                     m.put("address_current", rs.getString("address"));

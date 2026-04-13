@@ -27,8 +27,10 @@ public final class Constants {
     public static final String REDCROSS_UNTIL_PARAM = "until";
 
     public static final String CLICKHOUSE_URL = "http://clickhouse:8123";
+    public static final String CLICKHOUSE_USER = "default";
+    public static final String CLICKHOUSE_PASSWORD = "clickhouse";
     public static final String ELASTIC_URL = "http://elasticsearch:9200";
-    public static final String ELASTIC_INDEX_BANKS = "blood-banks";
-    public static final String ELASTIC_INDEX_DONORS = "donors";
+    public static final String ELASTIC_INDEX_BANKS = "bb_inventory_current";
+    public static final String ELASTIC_INDEX_DONORS = "donor_availability_current";
 
 }
