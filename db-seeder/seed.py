@@ -50,11 +50,12 @@ WHO_DSN = dict(
 # Indian blood group distribution (source: NBTC / published studies)
 #   O+  37%  | B+  25%  | A+  22%  | AB+  7%
 #   O-   3%  | B-   3%  | A-   2%  | AB-  1%
+#   BBG (Bombay, hh) ~ 1 in 1,000,000
 # ---------------------------------------------------------------------------
 BLOOD_GROUP_DIST = {
     "O+": 37, "B+": 25, "A+": 22, "AB+": 7,
     "O-":  3, "B-":  3, "A-":  2, "AB-": 1,
-    "BOMBAY": 0.2, "RH NULL": 0.05,
+    "BBG": 0.000001,
 }
 BLOOD_GROUPS = list(BLOOD_GROUP_DIST.keys())
 BG_WEIGHTS   = list(BLOOD_GROUP_DIST.values())
