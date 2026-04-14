@@ -1,7 +1,6 @@
 package com.hemo.backend.service;
 
 import com.hemo.backend.dto.DispatchResultDTO;
-import com.hemo.backend.dto.DonorCandidateDTO;
 import com.hemo.backend.dto.DonorSearchResponseDTO;
 import com.hemo.backend.dto.RequestDTO;
 import com.hemo.backend.dto.RequestSummaryDTO;
@@ -16,15 +15,16 @@ import com.hemo.backend.repository.SearchRepository;
 import java.time.LocalDateTime;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
-@Slf4j
 public class RequestService {
+    private static final Logger LOGGER = LoggerFactory.getLogger(RequestService.class);
 
     private final RequestRepository requestRepository;
     private final SearchRepository searchRepository;
@@ -171,7 +171,7 @@ public class RequestService {
 
     private int dispatchFromOffset(Request request, int offset, int batchSize, String mode) {
         if (batchSize <= 0) {
-            emitSmsSummary(request.getRequestId(), mode, offset, batchSize, 0);
+            emitSmsSummary(request.getRequestId(), mode, 0);
             return 0;
         }
 
@@ -183,29 +183,18 @@ public class RequestService {
         );
 
         int sent = 0;
-        for (DonorCandidateDTO donor : donorBatch.getDonors()) {
+        for (int i = 0; i < donorBatch.getDonors().size(); i++) {
             sent++;
-            log.info(
-                "sms_send request={} mode={} donorId={} donorBloodGroup={} donorPhone={}",
-                request.getRequestId(),
-                mode,
-                donor.getDonorId(),
-                donor.getBloodGroup(),
-                donor.getPhone()
-            );
         }
 
-        emitSmsSummary(request.getRequestId(), mode, offset, batchSize, sent);
+        emitSmsSummary(request.getRequestId(), mode, sent);
         return sent;
     }
 
-    private void emitSmsSummary(Long requestId, String mode, int offset, int attempted, int sent) {
-        log.info(
-            "sms_summary request={} mode={} offset={} attempted={} sent={}",
+    private void emitSmsSummary(Long requestId, String mode, int sent) {
+        LOGGER.info("sms_summary request={} mode={} sent={}",
             requestId,
             mode,
-            offset,
-            attempted,
             sent
         );
     }

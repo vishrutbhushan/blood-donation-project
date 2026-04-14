@@ -16,7 +16,6 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.scheduling.annotation.EnableScheduling;
@@ -24,7 +23,6 @@ import org.springframework.scheduling.annotation.Scheduled;
 
 @SpringBootApplication
 @EnableScheduling
-@Slf4j
 public class App {
     private final JsonUtil json;
     private final PincodeGeoMap pincodeGeoMap;
@@ -56,13 +54,11 @@ public class App {
 
     @PostConstruct
     public void onStart() {
-        log.info("etl starting");
         state = json.readFileMap(statePath());
         bootstrapElasticsearchWithRetry();
         state = new HashMap<>();
         runInitialBackfillIfNeeded();
         runIncremental();
-        log.info("cycle complete");
     }
 
     private void bootstrapElasticsearchWithRetry() {
@@ -77,11 +73,6 @@ public class App {
                 if (attempt == maxAttempts) {
                     throw ex;
                 }
-                log.warn(
-                    "elasticsearch bootstrap attempt {} failed, retrying in {}ms: {}",
-                    attempt,
-                    delayMs,
-                    ex.getMessage());
                 try {
                     Thread.sleep(delayMs);
                 } catch (InterruptedException ie) {

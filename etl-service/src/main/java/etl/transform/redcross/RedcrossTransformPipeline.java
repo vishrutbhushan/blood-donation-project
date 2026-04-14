@@ -12,11 +12,9 @@ import etl.util.TimeUtil;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 @Component
-@Slf4j
 public class RedcrossTransformPipeline {
     private static final String BANK_RECORD_KEY = "centres";
     private static final String DONOR_RECORD_KEY = "people";
@@ -128,7 +126,6 @@ public class RedcrossTransformPipeline {
     private GeoPoint geo(String pin, PincodeGeoMap geoMap) {
         GeoPoint point = geoMap.get(pin);
         if (point == null) {
-            log.warn("missing geo mapping for pincode: {} - using default (0.0, 0.0)", pin);
             return new GeoPoint(0.0, 0.0);
         }
         return point;
