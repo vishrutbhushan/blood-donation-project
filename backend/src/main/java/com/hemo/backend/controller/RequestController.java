@@ -1,7 +1,10 @@
 package com.hemo.backend.controller;
 
+import com.hemo.backend.dto.ActiveRequestStatusDTO;
+import com.hemo.backend.dto.DispatchResultDTO;
 import com.hemo.backend.dto.RequestDTO;
-import com.hemo.backend.entity.Request;
+import com.hemo.backend.dto.RequestSummaryDTO;
+import com.hemo.backend.dto.ResponseRecordDTO;
 import com.hemo.backend.service.RequestService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -9,7 +12,6 @@ import org.springframework.web.bind.annotation.*;
 
 
 import java.util.List;
-import java.util.Map;
 
 @RestController
 @RequestMapping("/requests")
@@ -18,22 +20,34 @@ public class RequestController {
 
     private final RequestService requestService;
 
-    // ✅ Create Request
     @PostMapping("/{searchId}")
-    public Request createRequest(@PathVariable Long searchId,
+    public RequestSummaryDTO createRequest(@PathVariable Long searchId,
                                 @Valid @RequestBody RequestDTO dto) {
         return requestService.createRequest(searchId, dto);
     }
 
-    // ✅ Retry Request (Self FK)
-    @PostMapping("/retry/{requestId}")
-    public Request retryRequest(@PathVariable Long requestId) {
-        return requestService.retryRequest(requestId);
+    @PostMapping("/{requestId}/re-request")
+    public RequestSummaryDTO reRequest(@PathVariable Long requestId) {
+        return requestService.reRequest(requestId);
     }
 
-    // ✅ Get Request History (IMPORTANT)
+    @PostMapping("/{requestId}/dispatch-next")
+    public DispatchResultDTO dispatchNext(@PathVariable Long requestId) {
+        return requestService.dispatchNextTwenty(requestId);
+    }
+
     @GetMapping("/user/{userId}")
-    public List<Map<String, Object>> getUserRequests(@PathVariable Long userId) {
+    public List<RequestSummaryDTO> getUserRequests(@PathVariable Long userId) {
         return requestService.getUserRequestHistory(userId);
+    }
+
+    @GetMapping("/user/{userId}/responses")
+    public List<ResponseRecordDTO> getUserResponses(@PathVariable Long userId) {
+        return requestService.getUserResponses(userId);
+    }
+
+    @GetMapping("/user/{userId}/active")
+    public ActiveRequestStatusDTO hasActive(@PathVariable Long userId) {
+        return new ActiveRequestStatusDTO(requestService.hasActiveRequest(userId));
     }
 }

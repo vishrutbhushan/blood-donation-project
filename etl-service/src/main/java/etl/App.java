@@ -16,6 +16,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.scheduling.annotation.EnableScheduling;
@@ -23,6 +24,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 
 @SpringBootApplication
 @EnableScheduling
+@Slf4j
 public class App {
     private final JsonUtil json;
     private final PincodeGeoMap pincodeGeoMap;
@@ -54,11 +56,40 @@ public class App {
 
     @PostConstruct
     public void onStart() {
-        System.out.println("etl starting");
+        log.info("etl starting");
         state = json.readFileMap(statePath());
+        bootstrapElasticsearchWithRetry();
+        state = new HashMap<>();
         runInitialBackfillIfNeeded();
         runIncremental();
-        System.out.println("cycle complete");
+        log.info("cycle complete");
+    }
+
+    private void bootstrapElasticsearchWithRetry() {
+        final int maxAttempts = 18;
+        final long delayMs = 5000L;
+
+        for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+            try {
+                elasticsearchLoader.bootstrap();
+                return;
+            } catch (RuntimeException ex) {
+                if (attempt == maxAttempts) {
+                    throw ex;
+                }
+                log.warn(
+                    "elasticsearch bootstrap attempt {} failed, retrying in {}ms: {}",
+                    attempt,
+                    delayMs,
+                    ex.getMessage());
+                try {
+                    Thread.sleep(delayMs);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException("interrupted while waiting to retry Elasticsearch bootstrap", ie);
+                }
+            }
+        }
     }
 
     @Scheduled(fixedDelay = Constants.SCHEDULE_MS)
@@ -91,7 +122,7 @@ public class App {
         while (cursor < toTs) {
             long end = Math.min(cursor + Constants.INCREMENT_WINDOW_MS, toTs);
             Object payload = handler.fetchIncremental(cursor, end);
-            EtlBatch batch = handler.transform(payload, pincodeGeoMap.asMap());
+            EtlBatch batch = handler.transform(payload, pincodeGeoMap);
             mergeSourceBatch(handler.sourceName(), batch);
             cursor = end;
         }

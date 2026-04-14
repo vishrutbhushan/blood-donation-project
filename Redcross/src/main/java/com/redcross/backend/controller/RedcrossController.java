@@ -1,9 +1,10 @@
 package com.redcross.backend.controller;
 
+import com.redcross.backend.dto.RedcrossCentreDTO;
+import com.redcross.backend.dto.RedcrossDonorDTO;
+import com.redcross.backend.dto.RedcrossIncrementalResponseDTO;
 import com.redcross.backend.repository.RedcrossRepository;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -20,22 +21,25 @@ public class RedcrossController {
     // ─── api_contracts.txt endpoints ──────────────────────────────────────────
 
     @GetMapping("/api/redcross/centres")
-    public List<Map<String, Object>> getCentres() {
+    public List<RedcrossCentreDTO> getCentres() {
         return repo.fetchAllCentres();
     }
 
     @GetMapping("/api/redcross/centres/incremental")
-    public List<Map<String, Object>> getCentresIncremental(@RequestParam long since) {
+    public List<RedcrossCentreDTO> getCentresIncremental(@RequestParam long since) {
         return repo.fetchCentresSince(since);
     }
 
     @GetMapping("/api/redcross/people")
-    public List<Map<String, Object>> getPeople() {
-        return repo.fetchAllPeople();
+    public List<RedcrossDonorDTO> getPeople(
+            @RequestParam(required = false) String bloodGroup,
+            @RequestParam(required = false) String pincode,
+            @RequestParam(defaultValue = "200") int limit) {
+        return repo.fetchPeopleFiltered(bloodGroup, pincode, limit);
     }
 
     @GetMapping("/api/redcross/people/incremental")
-    public List<Map<String, Object>> getPeopleIncremental(@RequestParam long since) {
+    public List<RedcrossDonorDTO> getPeopleIncremental(@RequestParam long since) {
         return repo.fetchPeopleSince(since);
     }
 
@@ -44,12 +48,9 @@ public class RedcrossController {
     // Returns:   { "centres": [...banks...], "people": [...donors...] }
 
     @GetMapping("/incremental")
-    public Map<String, Object> etlIncremental(
+    public RedcrossIncrementalResponseDTO etlIncremental(
             @RequestParam long since,
             @RequestParam long until) {
-        Map<String, Object> result = new LinkedHashMap<>();
-        result.put("centres", repo.fetchEtlBanks(since, until));
-        result.put("people", repo.fetchEtlDonors(since, until));
-        return result;
+        return new RedcrossIncrementalResponseDTO(repo.fetchEtlBanks(since, until), repo.fetchEtlDonors(since, until));
     }
 }

@@ -6,13 +6,69 @@ This repository contains a Docker Compose-based stack for the blood donation pro
 
 The stack uses service-level horizontal scaling where it makes sense:
 
-- Elasticsearch runs as a 3-node cluster for search and index availability.
-- ClickHouse runs as a 3-node cluster for analytics storage and distributed reads.
-- PostgreSQL uses a primary-replica topology with streaming replication for read scaling and failover-oriented architecture.
+- In single-node mode, Elasticsearch and ClickHouse run as single instances.
+- In full mode, Elasticsearch runs as a 3-node cluster for search and index availability.
+- In full mode, ClickHouse runs as a 3-node cluster for analytics storage and distributed reads.
+- In full mode, PostgreSQL adds a streaming read replica (`postgres-replica`) to the primary.
 - The Redcross and WHO databases run as separate PostgreSQL instances.
 - Backend services, Grafana, and the frontend remain single instances in the current setup.
 
 This is infrastructure scaling, not application-level sharding. No business logic is embedded in the stack definition.
+
+## Startup Modes
+
+One Docker Compose file drives both modes:
+
+- `docker-compose.yml` is the only stack definition.
+- `SINGLE_MODE=true` in [`.env`](.env) starts the lightweight 1-node mode.
+- `SINGLE_MODE=false` plus the `full` profile starts the 3-node Elasticsearch and ClickHouse setup with the PostgreSQL read replica.
+
+Run either mode directly from the terminal:
+
+```powershell
+
+# Build once (sufficient for both modes)
+docker compose build
+
+$env:SINGLE_MODE="true"; 
+
+# Single-node mode: build
+docker compose build
+
+# Single-node mode: start
+docker compose up -d
+
+# Single-node mode: remove containers and network
+docker compose down --remove-orphans
+
+
+$env:SINGLE_MODE="false"; 
+
+# Full cluster mode: build
+docker compose --profile full build
+
+# Full cluster mode: start
+docker compose --profile full up -d
+
+# Full cluster mode: remove containers and network
+docker compose --profile full down --remove-orphans
+
+# Remove stack and ALL project volumes (use when you want a clean reset)
+docker compose --profile full down -v --remove-orphans
+```
+
+Windows cmd equivalents:
+
+```cmd
+set SINGLE_MODE=true && docker compose up -d
+set SINGLE_MODE=false && docker compose --profile full up -d
+docker compose --profile full down -v --remove-orphans
+```
+
+Important when switching between single mode and full mode:
+
+- Run `docker compose --profile full down -v --remove-orphans` before starting in the other mode.
+- Elasticsearch persists cluster voting metadata in volumes; reusing old volumes across modes can prevent startup.
 
 ## Communication Flow
 
@@ -23,6 +79,8 @@ Services communicate directly over the Docker Compose network using service name
 - The WHO service connects to `who-db`.
 - Grafana connects to Elasticsearch and ClickHouse through provisioned datasources.
 - The ETL service, when run, talks to the source services and pushes data to ClickHouse and Elasticsearch.
+
+The Spring Boot services resolve database and search settings from environment variables through their application property files. The ETL service reads its runtime URLs and credentials from environment variables directly, which are still provided by the shared `.env` file.
 
 For local host access, the application and PostgreSQL services are published on ports such as `8080`, `8081`, `8082`, `3000`, `3001`, `5432`, `5433`, `5434`, and `5435`. Elasticsearch and ClickHouse are internal-only.
 

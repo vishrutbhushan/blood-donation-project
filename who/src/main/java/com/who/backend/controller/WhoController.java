@@ -1,9 +1,10 @@
 package com.who.backend.controller;
 
+import com.who.backend.dto.WhoBloodBankDTO;
+import com.who.backend.dto.WhoDonorDTO;
+import com.who.backend.dto.WhoIncrementalResponseDTO;
 import com.who.backend.repository.WhoRepository;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -20,22 +21,25 @@ public class WhoController {
     // ─── api_contracts.txt endpoints ──────────────────────────────────────────
 
     @GetMapping("/api/who/blood-banks")
-    public List<Map<String, Object>> getBloodBanks() {
+    public List<WhoBloodBankDTO> getBloodBanks() {
         return repo.fetchAllBloodBanks();
     }
 
     @GetMapping("/api/who/blood-banks/incremental")
-    public List<Map<String, Object>> getBloodBanksIncremental(@RequestParam long since) {
+    public List<WhoBloodBankDTO> getBloodBanksIncremental(@RequestParam long since) {
         return repo.fetchBloodBanksSince(since);
     }
 
     @GetMapping("/api/who/donors")
-    public List<Map<String, Object>> getDonors() {
-        return repo.fetchAllDonors();
+    public List<WhoDonorDTO> getDonors(
+            @RequestParam(required = false) String bloodGroup,
+            @RequestParam(required = false) String pincode,
+            @RequestParam(defaultValue = "200") int limit) {
+        return repo.fetchDonorsFiltered(bloodGroup, pincode, limit);
     }
 
     @GetMapping("/api/who/donors/incremental")
-    public List<Map<String, Object>> getDonorsIncremental(@RequestParam long since) {
+    public List<WhoDonorDTO> getDonorsIncremental(@RequestParam long since) {
         return repo.fetchDonorsSince(since);
     }
 
@@ -44,12 +48,9 @@ public class WhoController {
     // Returns:   { "blood_banks": [...banks...], "donors": [...donors...] }
 
     @GetMapping("/incremental")
-    public Map<String, Object> etlIncremental(
+    public WhoIncrementalResponseDTO etlIncremental(
             @RequestParam long since,
             @RequestParam long until) {
-        Map<String, Object> result = new LinkedHashMap<>();
-        result.put("blood_banks", repo.fetchEtlBanks(since, until));
-        result.put("donors", repo.fetchEtlDonors(since, until));
-        return result;
+        return new WhoIncrementalResponseDTO(repo.fetchEtlBanks(since, until), repo.fetchEtlDonors(since, until));
     }
 }

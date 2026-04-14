@@ -13,6 +13,8 @@ public class ResponseDTO {
     @NotBlank
     private String donorName;
 
+    private String abhaId;
+
     @NotBlank
     private String phoneNumber;
 
@@ -23,5 +25,5 @@ public class ResponseDTO {
     private String location;
 
     @NotBlank
-    private String responseStatus; // YES / NO
+    private String responseStatus;
 }

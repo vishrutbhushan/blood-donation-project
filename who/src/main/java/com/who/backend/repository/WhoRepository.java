@@ -1,22 +1,103 @@
 package com.who.backend.repository;
 
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Timestamp;
-import java.time.format.DateTimeFormatter;
+import com.who.backend.dto.WhoBloodBankDTO;
+import com.who.backend.dto.WhoDonorDTO;
+import com.who.backend.dto.WhoEtlBankDTO;
+import com.who.backend.dto.WhoEtlDonorDTO;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import org.springframework.jdbc.core.BeanPropertyRowMapper;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.core.RowCallbackHandler;
 import org.springframework.stereotype.Repository;
 
 @Repository
 public class WhoRepository {
 
-    private static final DateTimeFormatter STORE_FMT =
-            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+    private static final int MAX_LIMIT = 500;
+
+    private static final String SQL_BANKS_ALL =
+        "SELECT bb.bb_id AS bb_id, bb.name, bb.category, bb.phone, bb.email, "
+        + "bb.street, bb.city, bb.state, bb.pincode, "
+        + "(EXTRACT(EPOCH FROM bb.created_at) * 1000)::bigint AS created_at, "
+        + "(EXTRACT(EPOCH FROM bb.updated_at) * 1000)::bigint AS updated_at, "
+        + "false AS deleted "
+        + "FROM blood_bank bb ORDER BY bb.bb_id";
+
+    private static final String SQL_BANKS_SINCE =
+        "SELECT bb.bb_id AS bb_id, bb.name, bb.category, bb.phone, bb.email, "
+        + "bb.street, bb.city, bb.state, bb.pincode, "
+        + "(EXTRACT(EPOCH FROM bb.created_at) * 1000)::bigint AS created_at, "
+        + "(EXTRACT(EPOCH FROM bb.updated_at) * 1000)::bigint AS updated_at, "
+        + "false AS deleted "
+        + "FROM blood_bank bb "
+        + "WHERE bb.updated_at >= to_timestamp(? / 1000.0) "
+        + "ORDER BY bb.bb_id";
+
+    private static final String SQL_INVENTORY_ALL =
+        "SELECT bi.bb_id AS bb_id, bi.blood_group, bi.component_type, bi.units_available, "
+        + "(EXTRACT(EPOCH FROM bi.last_updated) * 1000)::bigint AS last_updated "
+        + "FROM blood_inventory bi ORDER BY bi.bb_id, bi.inventory_id";
+
+    private static final String SQL_INVENTORY_SINCE =
+        "SELECT bi.bb_id AS bb_id, bi.blood_group, bi.component_type, bi.units_available, "
+        + "(EXTRACT(EPOCH FROM bi.last_updated) * 1000)::bigint AS last_updated "
+        + "FROM blood_inventory bi "
+        + "WHERE bi.bb_id IN (SELECT bb_id FROM blood_bank WHERE updated_at >= to_timestamp(? / 1000.0)) "
+        + "ORDER BY bi.bb_id, bi.inventory_id";
+
+    private static final String SQL_DONORS_ALL =
+        "SELECT d.name, d.aadhaar_hash, d.phone, d.city, d.state, d.pincode, d.blood_group, d.age, "
+        + "to_char(d.last_donated, 'YYYY-MM-DD') AS last_donated, "
+        + "(EXTRACT(EPOCH FROM d.created_at) * 1000)::bigint AS created_at, "
+        + "(EXTRACT(EPOCH FROM d.updated_at) * 1000)::bigint AS updated_at, "
+        + "false AS deleted "
+        + "FROM blood_donor d ORDER BY d.donor_id";
+
+    private static final String SQL_DONORS_SINCE =
+        "SELECT d.name, d.aadhaar_hash, d.phone, d.city, d.state, d.pincode, d.blood_group, d.age, "
+        + "to_char(d.last_donated, 'YYYY-MM-DD') AS last_donated, "
+        + "(EXTRACT(EPOCH FROM d.created_at) * 1000)::bigint AS created_at, "
+        + "(EXTRACT(EPOCH FROM d.updated_at) * 1000)::bigint AS updated_at, "
+        + "false AS deleted "
+        + "FROM blood_donor d "
+        + "WHERE d.updated_at >= to_timestamp(? / 1000.0) "
+        + "ORDER BY d.donor_id";
+
+    private static final String SQL_DONORS_FILTERED =
+        "SELECT d.name, d.aadhaar_hash, d.phone, d.city, d.state, d.pincode, d.blood_group, d.age, "
+        + "to_char(d.last_donated, 'YYYY-MM-DD') AS last_donated, "
+        + "(EXTRACT(EPOCH FROM d.created_at) * 1000)::bigint AS created_at, "
+        + "(EXTRACT(EPOCH FROM d.updated_at) * 1000)::bigint AS updated_at, "
+        + "false AS deleted "
+        + "FROM blood_donor d "
+        + "WHERE (? IS NULL OR d.blood_group = ?) "
+        + "AND (? IS NULL OR d.pincode = ?) "
+        + "ORDER BY d.updated_at DESC LIMIT ?";
+
+    private static final String SQL_ETL_BANKS_RANGE =
+        "SELECT CAST(bb.bb_id AS text) AS bank_id, bb.name AS bank_name, bb.category, "
+        + "bb.street AS address, bb.city, bb.state, bb.pincode, bb.phone, bb.email, "
+        + "to_char(bb.created_at, 'YYYY-MM-DD HH24:MI:SS') AS created_at, "
+        + "to_char(bb.updated_at, 'YYYY-MM-DD HH24:MI:SS') AS update_time, "
+        + "false AS deleted "
+        + "FROM blood_bank bb "
+        + "WHERE bb.updated_at >= to_timestamp(? / 1000.0) "
+        + "AND bb.updated_at < to_timestamp(? / 1000.0) "
+        + "ORDER BY bb.bb_id";
+
+    private static final String SQL_ETL_DONORS_RANGE =
+        "SELECT CAST(d.donor_id AS text) AS donor_id, d.name, d.blood_group, d.age, d.phone, "
+        + "NULL::text AS email, NULL::text AS address_current, d.city AS city_current, d.state AS state_current, "
+        + "d.pincode AS pincode_current, CAST(d.bb_id AS text) AS bank_id, "
+        + "to_char(d.last_donated, 'YYYY-MM-DD') AS last_donated_on, "
+        + "NULL::text AS last_donated_blood_bank, to_char(d.updated_at, 'YYYY-MM-DD HH24:MI:SS') AS update_time, "
+        + "false AS deleted "
+        + "FROM blood_donor d "
+        + "WHERE d.updated_at >= to_timestamp(? / 1000.0) "
+        + "AND d.updated_at < to_timestamp(? / 1000.0) "
+        + "ORDER BY d.donor_id";
 
     private final JdbcTemplate jdbc;
 
@@ -26,88 +107,39 @@ public class WhoRepository {
 
     // ─── api_contracts: GET /api/who/blood-banks (all + incremental) ──────────
 
-    public List<Map<String, Object>> fetchAllBloodBanks() {
+    public List<WhoBloodBankDTO> fetchAllBloodBanks() {
         return fetchBloodBanksWithInventory(null);
     }
 
-    public List<Map<String, Object>> fetchBloodBanksSince(long since) {
+    public List<WhoBloodBankDTO> fetchBloodBanksSince(long since) {
         return fetchBloodBanksWithInventory(since);
     }
 
-    private List<Map<String, Object>> fetchBloodBanksWithInventory(Long since) {
-        String bankSql =
-                "SELECT bb.bb_id, bb.name, bb.category, bb.phone, bb.email, "
-                + "bb.street, bb.city, bb.state, bb.pincode, bb.created_at, bb.updated_at "
-                + "FROM blood_bank bb"
-                + (since != null ? " WHERE bb.updated_at >= to_timestamp(? / 1000.0)" : "")
-                + " ORDER BY bb.bb_id";
+    private List<WhoBloodBankDTO> fetchBloodBanksWithInventory(Long since) {
+        List<WhoBloodBankRowDTO> banks = since == null
+                ? jdbc.query(SQL_BANKS_ALL, BeanPropertyRowMapper.newInstance(WhoBloodBankRowDTO.class))
+                : jdbc.query(SQL_BANKS_SINCE, ps -> ps.setLong(1, since),
+                        BeanPropertyRowMapper.newInstance(WhoBloodBankRowDTO.class));
 
-        String invSql =
-                "SELECT bi.bb_id, bi.blood_group, bi.component_type, bi.units_available, "
-                + "bi.last_updated "
-                + "FROM blood_inventory bi"
-                + (since != null
-                        ? " WHERE bi.bb_id IN (SELECT bb_id FROM blood_bank"
-                          + " WHERE updated_at >= to_timestamp(? / 1000.0))"
-                        : "")
-                + " ORDER BY bi.bb_id, bi.inventory_id";
-
-        Map<Long, Map<String, Object>> bankMap = new LinkedHashMap<>();
-
-        RowCallbackHandler bankRch = rs -> {
-            long bbId = rs.getLong("bb_id");
-            Map<String, Object> bank = new LinkedHashMap<>();
-            bank.put("name", rs.getString("name"));
-            bank.put("category", rs.getString("category"));
-            bank.put("phone", rs.getString("phone"));
-            bank.put("email", rs.getString("email"));
-            bank.put("street", rs.getString("street"));
-            bank.put("city", rs.getString("city"));
-            bank.put("state", rs.getString("state"));
-            bank.put("pincode", rs.getString("pincode"));
-            Timestamp c = rs.getTimestamp("created_at");
-            bank.put("created_at", c != null ? c.toInstant().toEpochMilli() : null);
-            Timestamp u = rs.getTimestamp("updated_at");
-            bank.put("updated_at", u != null ? u.toInstant().toEpochMilli() : null);
-            bank.put("blood_inventory", new ArrayList<>());
-            bank.put("deleted", false);
-            bankMap.put(bbId, bank);
-        };
-
-        if (since != null) {
-            long s = since;
-            jdbc.query(bankSql, ps -> ps.setLong(1, s), bankRch);
-        } else {
-            jdbc.query(bankSql, bankRch);
-        }
-
-        if (bankMap.isEmpty()) {
+        if (banks.isEmpty()) {
             return new ArrayList<>();
         }
 
-        Map<Long, List<Map<String, Object>>> invMap = new LinkedHashMap<>();
+        List<WhoInventoryRowDTO> inventories = since == null
+                ? jdbc.query(SQL_INVENTORY_ALL, BeanPropertyRowMapper.newInstance(WhoInventoryRowDTO.class))
+                : jdbc.query(SQL_INVENTORY_SINCE, ps -> ps.setLong(1, since),
+                        BeanPropertyRowMapper.newInstance(WhoInventoryRowDTO.class));
 
-        RowCallbackHandler invRch = rs -> {
-            long bbId = rs.getLong("bb_id");
-            Map<String, Object> inv = new LinkedHashMap<>();
-            inv.put("blood_group", rs.getString("blood_group"));
-            inv.put("component_type", rs.getString("component_type"));
-            inv.put("units_available", rs.getInt("units_available"));
-            Timestamp t = rs.getTimestamp("last_updated");
-            inv.put("last_updated", t != null ? t.toInstant().toEpochMilli() : null);
-            invMap.computeIfAbsent(bbId, k -> new ArrayList<>()).add(inv);
-        };
-
-        if (since != null) {
-            long s = since;
-            jdbc.query(invSql, ps -> ps.setLong(1, s), invRch);
-        } else {
-            jdbc.query(invSql, invRch);
+        Map<Long, WhoBloodBankDTO> bankMap = new LinkedHashMap<>();
+        for (WhoBloodBankRowDTO bank : banks) {
+            bankMap.put(bank.getBb_id(), bank);
         }
 
-        for (Map.Entry<Long, Map<String, Object>> e : bankMap.entrySet()) {
-            e.getValue().put("blood_inventory",
-                    invMap.getOrDefault(e.getKey(), new ArrayList<>()));
+        for (WhoInventoryRowDTO inv : inventories) {
+            WhoBloodBankDTO bank = bankMap.get(inv.getBb_id());
+            if (bank != null) {
+                bank.getBlood_inventory().add(inv);
+            }
         }
 
         return new ArrayList<>(bankMap.values());
@@ -115,48 +147,36 @@ public class WhoRepository {
 
     // ─── api_contracts: GET /api/who/donors (all + incremental) ──────────────
 
-    public List<Map<String, Object>> fetchAllDonors() {
+    public List<WhoDonorDTO> fetchAllDonors() {
         return fetchDonors(null);
     }
 
-    public List<Map<String, Object>> fetchDonorsSince(long since) {
+    public List<WhoDonorDTO> fetchDonorsFiltered(String bloodGroup, String pincode, int limit) {
+        String bg = (bloodGroup == null || bloodGroup.isBlank()) ? null : bloodGroup;
+        String pin = (pincode == null || pincode.isBlank()) ? null : pincode;
+        int bounded = Math.max(1, Math.min(limit, MAX_LIMIT));
+
+        return jdbc.query(SQL_DONORS_FILTERED,
+                ps -> {
+                    ps.setObject(1, bg);
+                    ps.setObject(2, bg);
+                    ps.setObject(3, pin);
+                    ps.setObject(4, pin);
+                    ps.setInt(5, bounded);
+                },
+                BeanPropertyRowMapper.newInstance(WhoDonorDTO.class));
+    }
+
+    public List<WhoDonorDTO> fetchDonorsSince(long since) {
         return fetchDonors(since);
     }
 
-    private List<Map<String, Object>> fetchDonors(Long since) {
-        String sql =
-                "SELECT d.donor_id, d.name, d.aadhaar_hash, d.phone, d.city, d.state, "
-                + "d.pincode, d.blood_group, d.age, d.last_donated, d.created_at, d.updated_at "
-                + "FROM blood_donor d"
-                + (since != null ? " WHERE d.updated_at >= to_timestamp(? / 1000.0)" : "")
-                + " ORDER BY d.donor_id";
-
-        if (since != null) {
-            long s = since;
-            return jdbc.query(sql, ps -> ps.setLong(1, s), (rs, i) -> buildDonorRow(rs));
-        } else {
-            return jdbc.query(sql, (rs, i) -> buildDonorRow(rs));
+    private List<WhoDonorDTO> fetchDonors(Long since) {
+        if (since == null) {
+            return jdbc.query(SQL_DONORS_ALL, BeanPropertyRowMapper.newInstance(WhoDonorDTO.class));
         }
-    }
-
-    private Map<String, Object> buildDonorRow(ResultSet rs) throws SQLException {
-        Map<String, Object> m = new LinkedHashMap<>();
-        m.put("name", rs.getString("name"));
-        m.put("aadhaar_hash", rs.getString("aadhaar_hash"));
-        m.put("phone", rs.getString("phone"));
-        m.put("city", rs.getString("city"));
-        m.put("state", rs.getString("state"));
-        m.put("pincode", rs.getString("pincode"));
-        m.put("blood_group", rs.getString("blood_group"));
-        m.put("age", rs.getInt("age"));
-        java.sql.Date ld = rs.getDate("last_donated");
-        m.put("last_donated", ld != null ? ld.toString() : null);
-        Timestamp c = rs.getTimestamp("created_at");
-        m.put("created_at", c != null ? c.toInstant().toEpochMilli() : null);
-        Timestamp u = rs.getTimestamp("updated_at");
-        m.put("updated_at", u != null ? u.toInstant().toEpochMilli() : null);
-        m.put("deleted", false);
-        return m;
+        return jdbc.query(SQL_DONORS_SINCE, ps -> ps.setLong(1, since),
+                BeanPropertyRowMapper.newInstance(WhoDonorDTO.class));
     }
 
     // ─── ETL: GET /incremental?since=X&until=Y ────────────────────────────────
@@ -167,72 +187,45 @@ public class WhoRepository {
     //          city_current, state_current, pincode_current, bank_id,
     //          last_donated_on, last_donated_blood_bank(null), update_time
 
-    public List<Map<String, Object>> fetchEtlBanks(long since, long until) {
-        String sql =
-                "SELECT bb.bb_id, bb.name, bb.category, bb.street, bb.city, bb.state, bb.pincode, "
-                + "bb.phone, bb.email, bb.created_at, bb.updated_at "
-                + "FROM blood_bank bb "
-                + "WHERE bb.updated_at >= to_timestamp(? / 1000.0) "
-                + "  AND bb.updated_at < to_timestamp(? / 1000.0) "
-                + "ORDER BY bb.bb_id";
-
-        return jdbc.query(sql,
-                ps -> { ps.setLong(1, since); ps.setLong(2, until); },
-                (rs, i) -> {
-                    Map<String, Object> m = new LinkedHashMap<>();
-                    m.put("bank_id", String.valueOf(rs.getLong("bb_id")));
-                    m.put("bank_name", rs.getString("name"));
-                        m.put("category", rs.getString("category"));
-                    m.put("address", rs.getString("street"));
-                    m.put("city", rs.getString("city"));
-                    m.put("state", rs.getString("state"));
-                    m.put("pincode", rs.getString("pincode"));
-                    m.put("phone", rs.getString("phone"));
-                        m.put("email", rs.getString("email"));
-                        Timestamp createdTs = rs.getTimestamp("created_at");
-                        m.put("created_at",
-                            createdTs != null ? createdTs.toLocalDateTime().format(STORE_FMT) : null);
-                    Timestamp ts = rs.getTimestamp("updated_at");
-                    m.put("update_time",
-                            ts != null ? ts.toLocalDateTime().format(STORE_FMT) : null);
-                    m.put("deleted", false);
-                    return m;
-                });
+    public List<WhoEtlBankDTO> fetchEtlBanks(long since, long until) {
+        return jdbc.query(SQL_ETL_BANKS_RANGE,
+                ps -> {
+                    ps.setLong(1, since);
+                    ps.setLong(2, until);
+                },
+                BeanPropertyRowMapper.newInstance(WhoEtlBankDTO.class));
     }
 
-    public List<Map<String, Object>> fetchEtlDonors(long since, long until) {
-        String sql =
-                "SELECT d.donor_id, d.name, d.blood_group, d.phone, d.age, "
-                + "d.city, d.state, d.pincode, d.last_donated, d.updated_at, "
-                + "CAST(d.bb_id AS TEXT) AS bb_id_str "
-                + "FROM blood_donor d "
-                + "WHERE d.updated_at >= to_timestamp(? / 1000.0) "
-                + "  AND d.updated_at < to_timestamp(? / 1000.0) "
-                + "ORDER BY d.donor_id";
+    public List<WhoEtlDonorDTO> fetchEtlDonors(long since, long until) {
+        return jdbc.query(SQL_ETL_DONORS_RANGE,
+                ps -> {
+                    ps.setLong(1, since);
+                    ps.setLong(2, until);
+                },
+                BeanPropertyRowMapper.newInstance(WhoEtlDonorDTO.class));
+    }
 
-        return jdbc.query(sql,
-                ps -> { ps.setLong(1, since); ps.setLong(2, until); },
-                (rs, i) -> {
-                    Map<String, Object> m = new LinkedHashMap<>();
-                    m.put("donor_id", String.valueOf(rs.getLong("donor_id")));
-                    m.put("name", rs.getString("name"));
-                    m.put("blood_group", rs.getString("blood_group"));
-                    m.put("age", rs.getInt("age"));
-                    m.put("phone", rs.getString("phone"));
-                    m.put("email", null);
-                    m.put("address_current", null);
-                    m.put("city_current", rs.getString("city"));
-                    m.put("state_current", rs.getString("state"));
-                    m.put("pincode_current", rs.getString("pincode"));
-                    m.put("bank_id", rs.getString("bb_id_str"));
-                    java.sql.Date ld = rs.getDate("last_donated");
-                    m.put("last_donated_on", ld != null ? ld.toString() : null);
-                    m.put("last_donated_blood_bank", null);
-                    Timestamp ts = rs.getTimestamp("updated_at");
-                    m.put("update_time",
-                            ts != null ? ts.toLocalDateTime().format(STORE_FMT) : null);
-                    m.put("deleted", false);
-                    return m;
-                });
+    private static class WhoBloodBankRowDTO extends WhoBloodBankDTO {
+        private Long bb_id;
+
+        public Long getBb_id() {
+            return bb_id;
+        }
+
+        public void setBb_id(Long bb_id) {
+            this.bb_id = bb_id;
+        }
+    }
+
+    private static class WhoInventoryRowDTO extends com.who.backend.dto.WhoInventoryDTO {
+        private Long bb_id;
+
+        public Long getBb_id() {
+            return bb_id;
+        }
+
+        public void setBb_id(Long bb_id) {
+            this.bb_id = bb_id;
+        }
     }
 }

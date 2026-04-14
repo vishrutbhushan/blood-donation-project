@@ -1,29 +1,51 @@
 package etl.util;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import etl.model.GeoPoint;
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.HashMap;
 import java.util.Map;
 import org.springframework.stereotype.Component;
 
 @Component
 public class PincodeGeoMap {
-    private final Map<String, Object> geoMap;
+    private final Map<String, GeoPoint> geoMap;
 
     public PincodeGeoMap() {
-        this.geoMap = new HashMap<>();
-        this.geoMap.put("110001", point(28.6304, 77.2177));
-        this.geoMap.put("400001", point(18.9388, 72.8354));
-        this.geoMap.put("700001", point(22.5726, 88.3639));
-        this.geoMap.put("560001", point(12.9762, 77.6033));
+        this.geoMap = loadFromResource();
     }
 
-    public Map<String, Object> asMap() {
+    public GeoPoint get(String pin) {
+        if (pin == null) {
+            return null;
+        }
+        return geoMap.get(pin.trim());
+    }
+
+    public Map<String, GeoPoint> asMap() {
         return geoMap;
     }
 
-    private Map<String, Object> point(double lat, double lon) {
-        Map<String, Object> p = new HashMap<>();
-        p.put("lat", lat);
-        p.put("lon", lon);
-        return p;
+    private Map<String, GeoPoint> loadFromResource() {
+        try (InputStream is = getClass().getClassLoader().getResourceAsStream("pincode-map.json")) {
+            if (is == null) {
+                throw new IllegalStateException("pincode-map.json not found in ETL classpath");
+            }
+
+            ObjectMapper mapper = new ObjectMapper();
+            JsonNode root = mapper.readTree(is);
+            Map<String, GeoPoint> out = new HashMap<>();
+            root.fields().forEachRemaining(entry -> {
+                JsonNode node = entry.getValue();
+                double lat = node.path("lat").asDouble(0.0);
+                double lon = node.path("long").asDouble(0.0);
+                out.put(entry.getKey(), new GeoPoint(lat, lon));
+            });
+            return out;
+        } catch (IOException ex) {
+            throw new IllegalStateException("Failed to load pincode geo map", ex);
+        }
     }
 }

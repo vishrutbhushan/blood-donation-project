@@ -2,17 +2,27 @@ services:
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.15.0
     container_name: hemo-elasticsearch
+    env_file:
+      - ./.env
     environment:
+      SINGLE_MODE: ${SINGLE_MODE}
       cluster.name: hemo-es-cluster
       node.name: elasticsearch
-      discovery.seed_hosts: elasticsearch-2,elasticsearch-3
-      cluster.initial_master_nodes: elasticsearch,elasticsearch-2,elasticsearch-3
       xpack.security.enabled: "false"
       ES_JAVA_OPTS: -Xms1g -Xmx1g
+    command:
+      - bash
+      - -lc
+      - |
+        if [ "$$SINGLE_MODE" = "true" ]; then
+          exec /usr/local/bin/docker-entrypoint.sh eswrapper -E discovery.type=single-node -E cluster.name=hemo-es-cluster -E node.name=elasticsearch -E xpack.security.enabled=false
+        else
+          exec /usr/local/bin/docker-entrypoint.sh eswrapper -E cluster.name=hemo-es-cluster -E node.name=elasticsearch -E discovery.seed_hosts=elasticsearch-2,elasticsearch-3 -E cluster.initial_master_nodes=elasticsearch,elasticsearch-2,elasticsearch-3 -E xpack.security.enabled=false
+        fi
     volumes:
       - es_data_1:/usr/share/elasticsearch/data
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:9200 >/dev/null"]
+      test: ["CMD-SHELL", "curl -fsS 'http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=2s' >/dev/null"]
       interval: 10s
       timeout: 5s
       retries: 30
@@ -20,11 +30,12 @@ services:
   elasticsearch-2:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.15.0
     container_name: hemo-elasticsearch-2
+    profiles: ["full"]
+    env_file:
+      - ./.env
     environment:
       cluster.name: hemo-es-cluster
       node.name: elasticsearch-2
-      discovery.seed_hosts: elasticsearch,elasticsearch-3
-      cluster.initial_master_nodes: elasticsearch,elasticsearch-2,elasticsearch-3
       xpack.security.enabled: "false"
       ES_JAVA_OPTS: -Xms1g -Xmx1g
     volumes:
@@ -33,40 +44,26 @@ services:
   elasticsearch-3:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.15.0
     container_name: hemo-elasticsearch-3
+    profiles: ["full"]
+    env_file:
+      - ./.env
     environment:
       cluster.name: hemo-es-cluster
       node.name: elasticsearch-3
-      discovery.seed_hosts: elasticsearch,elasticsearch-2
-      cluster.initial_master_nodes: elasticsearch,elasticsearch-2,elasticsearch-3
       xpack.security.enabled: "false"
       ES_JAVA_OPTS: -Xms1g -Xmx1g
     volumes:
       - es_data_3:/usr/share/elasticsearch/data
 
-  backend:
-    build:
-      context: ./backend
-    container_name: hemo-backend
-    environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-primary:5432/bloodbank
-      SPRING_DATASOURCE_USERNAME: hemo_user
-      SPRING_DATASOURCE_PASSWORD: hemo_pass
-      ELASTICSEARCH_URL: http://elasticsearch:9200
-    ports:
-      - "8080:8080"
-    depends_on:
-      postgres-primary:
-        condition: service_healthy
-      elasticsearch:
-        condition: service_healthy
-
   postgres-primary:
     image: postgres:16
     container_name: postgres-primary
+    env_file:
+      - ./.env
     environment:
-      POSTGRES_DB: bloodbank
-      POSTGRES_USER: hemo_user
-      POSTGRES_PASSWORD: hemo_pass
+      POSTGRES_DB: ${POSTGRES_PRIMARY_DB}
+      POSTGRES_USER: ${POSTGRES_PRIMARY_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PRIMARY_PASSWORD}
     command:
       - bash
       - -ec
@@ -100,14 +97,17 @@ services:
   postgres-replica:
     image: postgres:16
     container_name: postgres-replica
+    profiles: ["full"]
     depends_on:
       postgres-primary:
         condition: service_healthy
+    env_file:
+      - ./.env
     environment:
-      POSTGRES_DB: bloodbank
-      POSTGRES_USER: hemo_user
-      POSTGRES_PASSWORD: hemo_pass
-      PGPASSWORD: hemo_pass
+      POSTGRES_DB: ${POSTGRES_PRIMARY_DB}
+      POSTGRES_USER: ${POSTGRES_PRIMARY_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PRIMARY_PASSWORD}
+      PGPASSWORD: ${POSTGRES_PRIMARY_PASSWORD}
     command:
       - bash
       - -ec
@@ -134,13 +134,16 @@ services:
   redcross-db:
     image: postgres:16
     container_name: redcross-db
+    env_file:
+      - ./.env
     environment:
-      POSTGRES_DB: redcross_db
-      POSTGRES_USER: redcross_user
-      POSTGRES_PASSWORD: redcross_pass
+      POSTGRES_DB: ${REDCROSS_DB_NAME}
+      POSTGRES_USER: ${REDCROSS_DB_USER}
+      POSTGRES_PASSWORD: ${REDCROSS_DB_PASSWORD}
     ports:
       - "5434:5432"
     volumes:
+      - redcross_db_data:/var/lib/postgresql/data
       - ./Redcross/src/main/resources/sourcetables.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U redcross_user -d redcross_db"]
@@ -148,31 +151,48 @@ services:
       timeout: 5s
       retries: 20
 
-  redcross-service:
-    build:
-      context: ./Redcross
-    container_name: redcross-service
+  who-db:
+    image: postgres:16
+    container_name: who-db
+    env_file:
+      - ./.env
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://redcross-db:5432/redcross_db
-      SPRING_DATASOURCE_USERNAME: redcross_user
-      SPRING_DATASOURCE_PASSWORD: redcross_pass
+      POSTGRES_DB: ${WHO_DB_NAME}
+      POSTGRES_USER: ${WHO_DB_USER}
+      POSTGRES_PASSWORD: ${WHO_DB_PASSWORD}
     ports:
-      - "8081:8081"
-    depends_on:
-      redcross-db:
-        condition: service_healthy
+      - "5435:5432"
+    volumes:
+      - who_db_data:/var/lib/postgresql/data
+      - ./who/src/main/resources/source_coder.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U who_user -d who_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
 
   clickhouse:
     image: clickhouse/clickhouse-server:24.8
     container_name: hemo-clickhouse
+    env_file:
+      - ./.env
     environment:
-      - CLICKHOUSE_USER=default
-      - CLICKHOUSE_PASSWORD=clickhouse
-      - CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1
+      SINGLE_MODE: ${SINGLE_MODE}
+    command:
+      - bash
+      - -lc
+      - |
+        if [ "$$SINGLE_MODE" = "true" ]; then
+          cp /config-src/cluster.single.xml /etc/clickhouse-server/config.d/01-cluster.xml
+        else
+          cp /config-src/cluster.full.xml /etc/clickhouse-server/config.d/01-cluster.xml
+        fi
+        exec /entrypoint.sh
     volumes:
       - ch_data_1:/var/lib/clickhouse
       - ./Clickhouse/resources/schema_clickhouse.sql:/docker-entrypoint-initdb.d/01_schema_clickhouse.sql:ro
-      - ./Clickhouse/resources/cluster.xml:/etc/clickhouse-server/config.d/01-cluster.xml:ro
+      - ./Clickhouse/resources/cluster.xml:/config-src/cluster.full.xml:ro
+      - ./Clickhouse/resources/cluster.single.xml:/config-src/cluster.single.xml:ro
     healthcheck:
       test: ["CMD-SHELL", "clickhouse-client --query 'SELECT 1' >/dev/null"]
       interval: 10s
@@ -182,6 +202,9 @@ services:
   clickhouse-2:
     image: clickhouse/clickhouse-server:24.8
     container_name: hemo-clickhouse-2
+    profiles: ["full"]
+    env_file:
+      - ./.env
     volumes:
       - ch_data_2:/var/lib/clickhouse
       - ./Clickhouse/resources/schema_clickhouse.sql:/docker-entrypoint-initdb.d/01_schema_clickhouse.sql:ro
@@ -190,18 +213,70 @@ services:
   clickhouse-3:
     image: clickhouse/clickhouse-server:24.8
     container_name: hemo-clickhouse-3
+    profiles: ["full"]
+    env_file:
+      - ./.env
     volumes:
       - ch_data_3:/var/lib/clickhouse
       - ./Clickhouse/resources/schema_clickhouse.sql:/docker-entrypoint-initdb.d/01_schema_clickhouse.sql:ro
       - ./Clickhouse/resources/cluster.xml:/etc/clickhouse-server/config.d/01-cluster.xml:ro
 
+  backend:
+    build:
+      context: ./backend
+    container_name: hemo-backend
+    env_file:
+      - ./.env
+    environment:
+      SPRING_DATASOURCE_URL: ${BACKEND_SPRING_DATASOURCE_URL}
+      SPRING_DATASOURCE_USERNAME: ${BACKEND_SPRING_DATASOURCE_USERNAME}
+      SPRING_DATASOURCE_PASSWORD: ${BACKEND_SPRING_DATASOURCE_PASSWORD}
+      ELASTICSEARCH_URL: ${BACKEND_ELASTICSEARCH_URL}
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres-primary:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+
+  redcross-service:
+    build:
+      context: ./Redcross
+    container_name: redcross-service
+    env_file:
+      - ./.env
+    environment:
+      SPRING_DATASOURCE_URL: ${REDCROSS_SPRING_DATASOURCE_URL}
+      SPRING_DATASOURCE_USERNAME: ${REDCROSS_SPRING_DATASOURCE_USERNAME}
+      SPRING_DATASOURCE_PASSWORD: ${REDCROSS_SPRING_DATASOURCE_PASSWORD}
+    ports:
+      - "8081:8081"
+    depends_on:
+      redcross-db:
+        condition: service_healthy
+
+  who-service:
+    build:
+      context: ./who
+    container_name: who-service
+    env_file:
+      - ./.env
+    environment:
+      SPRING_DATASOURCE_URL: ${WHO_SPRING_DATASOURCE_URL}
+      SPRING_DATASOURCE_USERNAME: ${WHO_SPRING_DATASOURCE_USERNAME}
+      SPRING_DATASOURCE_PASSWORD: ${WHO_SPRING_DATASOURCE_PASSWORD}
+    ports:
+      - "8082:8082"
+    depends_on:
+      who-db:
+        condition: service_healthy
+
   grafana:
     image: grafana/grafana-oss:11.1.0
     container_name: hemo-grafana
-    environment:
-      GF_SECURITY_ADMIN_USER: admin
-      GF_SECURITY_ADMIN_PASSWORD: admin
-      GF_INSTALL_PLUGINS: grafana-clickhouse-datasource
+    env_file:
+      - ./.env
     ports:
       - "3000:3000"
     volumes:
@@ -222,41 +297,12 @@ services:
     depends_on:
       - backend
 
-  who-db:
-    image: postgres:16
-    container_name: who-db
-    environment:
-      POSTGRES_DB: who_db
-      POSTGRES_USER: who_user
-      POSTGRES_PASSWORD: who_pass
-    ports:
-      - "5435:5432"
-    volumes:
-      - ./who/src/main/resources/source_coder.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U who_user -d who_db"]
-      interval: 10s
-      timeout: 5s
-      retries: 20
-
-  who-service:
-    build:
-      context: ./who
-    container_name: who-service
-    environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://who-db:5432/who_db
-      SPRING_DATASOURCE_USERNAME: who_user
-      SPRING_DATASOURCE_PASSWORD: who_pass
-    ports:
-      - "8082:8082"
-    depends_on:
-      who-db:
-        condition: service_healthy
-
   etl-service:
     build:
       context: ./etl-service
     container_name: etl-service
+    env_file:
+      - ./.env
     depends_on:
       who-service:
         condition: service_started
@@ -280,3 +326,5 @@ volumes:
   ch_data_3:
   grafana_data:
   etl_data:
+  redcross_db_data:
+  who_db_data:

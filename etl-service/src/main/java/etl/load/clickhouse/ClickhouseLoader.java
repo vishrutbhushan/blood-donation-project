@@ -51,13 +51,15 @@ public class ClickhouseLoader {
             int isDeleted = isDelete(b.getOp()) ? 1 : 0;
 
             sql("INSERT INTO blood_ops.dim_location "
-                + "(location_id, pincode, city, state, street_or_address, updated_at) VALUES ("
+                + "(location_id, pincode, city, state, street_or_address, latitude, longitude, updated_at) VALUES ("
                 + locationId + ","
                 + q(b.getPincode()) + ","
                 + q(b.getCity()) + ","
                 + q(b.getState()) + ","
                 + q(b.getAddress()) + ","
-                + dt(b.getUpdatedAt()) + ")");
+                + (b.getLat() != null ? b.getLat() : "0.0") + ","
+                + (b.getLon() != null ? b.getLon() : "0.0") + ","
+                + dt(b.getUpdatedAt()) + ");");
 
             sql("INSERT INTO blood_ops.dim_blood_bank "
                 + "(bank_id, source_id, source_bank_id, bank_name, category, phone, email, location_id, created_at, updated_at, is_deleted, version) VALUES ("
@@ -100,12 +102,14 @@ public class ClickhouseLoader {
             int isDeleted = isDelete(d.getOp()) ? 1 : 0;
 
             sql("INSERT INTO blood_ops.dim_location "
-                + "(location_id, pincode, city, state, street_or_address, updated_at) VALUES ("
+                + "(location_id, pincode, city, state, street_or_address, latitude, longitude, updated_at) VALUES ("
                 + locationId + ","
                 + q(d.getPincodeCurrent()) + ","
                 + q(d.getCityCurrent()) + ","
                 + q(d.getStateCurrent()) + ","
                 + q(d.getAddressCurrent()) + ","
+                + (d.getLat() != null ? d.getLat() : "0.0") + ","
+                + (d.getLon() != null ? d.getLon() : "0.0") + ","
                 + dt(d.getUpdatedAt()) + ")");
 
             sql("INSERT INTO blood_ops.dim_donor "
@@ -214,6 +218,8 @@ public class ClickhouseLoader {
             case "AB-" -> 6;
             case "O+" -> 7;
             case "O-" -> 8;
+            case "BOMBAY", "HH", "OH" -> 9;
+            case "RH NULL", "RHNULL", "RH-NULL" -> 10;
             default -> 0;
         };
     }

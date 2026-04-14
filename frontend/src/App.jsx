@@ -1,20 +1,62 @@
-import React from 'react';
-import { useMemo, useState } from 'react';
-import DonorResultsTable from './components/DonorResultsTable';
-import DonorSearchSection from './components/DonorSearchSection';
-import ResultsTable from './components/ResultsTable';
-import SearchForm from './components/SearchForm';
-import StatusBanner from './components/StatusBanner';
+import React, { useMemo } from 'react';
+import {
+  Accordion,
+  AccordionDetails,
+  AccordionSummary,
+  AppBar,
+  Box,
+  Button,
+  Container,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  FormControl,
+  InputLabel,
+  MenuItem,
+  Paper,
+  Select,
+  Tab,
+  Tabs,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  TextField,
+  Toolbar,
+  Typography,
+} from '@mui/material';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import WaterDropOutlinedIcon from '@mui/icons-material/WaterDropOutlined';
+import { useDispatch, useSelector } from 'react-redux';
+import { clearStatus, setDonorLoginOpen, setError, setLoading, setScreen, setStatusText } from './store/uiSlice';
+import {
+  setActiveRequest,
+  setBanks,
+  setLastRequestId,
+  setRequests,
+  setResponses,
+  setSearchField,
+  setSearchId,
+  setUserId,
+} from './store/searchSlice';
+import {
+  setAbhaId,
+  setConfirmOpen,
+  setDonorField,
+  setDonorSearched,
+  setDonors,
+  setMatchedCount,
+  setOtpSent,
+  setOtpValue,
+  setOtpVerified,
+  setProfile,
+} from './store/donorSlice';
 
-const initialForm = {
-  patientName: '',
-  phone: '',
-  bloodGroup: 'B+',
-  bloodComponent: 'Whole Blood',
-  hospitalName: '',
-  hospitalPincode: '',
-  unitsRequested: 1,
-};
+const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-', 'BOMBAY', 'RH NULL'];
+const COMPONENTS = ['Whole Blood', 'Packed RBC', 'Fresh Frozen Plasma', 'Platelet Concentrate', 'Plasma'];
 
 async function apiRequest(url, options = {}) {
   const response = await fetch(url, {
@@ -23,8 +65,16 @@ async function apiRequest(url, options = {}) {
   });
 
   if (!response.ok) {
-    const message = await response.text();
-    throw new Error(message || `Request failed: ${response.status}`);
+    let message = 'Request failed';
+    try {
+      const text = await response.text();
+      if (text) {
+        message = text;
+      }
+    } catch {
+      message = 'Request failed';
+    }
+    throw new Error(message);
   }
 
   return response.json();
@@ -54,28 +104,6 @@ function normalizeRedcrossCentre(centre) {
   };
 }
 
-function normalizeWhoDonor(donor) {
-  return {
-    name: donor.name || '-',
-    bloodGroup: donor.blood_group || '-',
-    pincode: donor.pincode || '-',
-    location: [donor.city, donor.state].filter(Boolean).join(', ') || '-',
-    phone: donor.phone || '-',
-    source: 'WHO',
-  };
-}
-
-function normalizeRedcrossDonor(person) {
-  return {
-    name: person.full_name || '-',
-    bloodGroup: person.blood_type || '-',
-    pincode: person.pincode || '-',
-    location: person.address || '-',
-    phone: person.contact_number || '-',
-    source: 'Redcross',
-  };
-}
-
 function matchesInventory(item, group, component) {
   const itemGroup = item.blood_group || item.blood_type;
   const itemComponent = item.component_type || item.component;
@@ -83,24 +111,40 @@ function matchesInventory(item, group, component) {
   return itemGroup === group && itemComponent === component && units > 0;
 }
 
-export default function App() {
-  const [screen, setScreen] = useState('blood-banks');
-  const [form, setForm] = useState(initialForm);
-  const [banks, setBanks] = useState([]);
-  const [donors, setDonors] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [message, setMessage] = useState('');
-  const [donorPhone, setDonorPhone] = useState('');
-  const [donorOtpSent, setDonorOtpSent] = useState(false);
-  const [donorOtpValue, setDonorOtpValue] = useState('');
-  const [donorOtpVerified, setDonorOtpVerified] = useState(false);
-  const [donorForm, setDonorForm] = useState({ bloodGroup: 'B+', pincode: '' });
-  const [donorSearched, setDonorSearched] = useState(false);
+function tabIndex(screen) {
+  if (screen === 'donors') {
+    return 1;
+  }
+  return 0;
+}
 
-  const [userId, setUserId] = useState(null);
-  const [searchId, setSearchId] = useState(null);
-  const [lastRequestId, setLastRequestId] = useState(null);
+export default function App() {
+  const dispatch = useDispatch();
+
+  const { screen, loading, error, statusText, donorLoginOpen } = useSelector((state) => state.ui);
+  const {
+    form,
+    banks,
+    userId,
+    searchId,
+    lastRequestId,
+    activeRequest,
+    requests,
+    responses,
+  } = useSelector((state) => state.search);
+  const {
+    abhaId,
+    phone,
+    name,
+    otpSent,
+    otpValue,
+    otpVerified,
+    form: donorForm,
+    donors,
+    matchedCount,
+    confirmOpen,
+    searched,
+  } = useSelector((state) => state.donor);
 
   const canSearch = useMemo(() => {
     return (
@@ -114,72 +158,92 @@ export default function App() {
   }, [form]);
 
   function updateForm(key, value) {
-    setForm((prev) => ({ ...prev, [key]: value }));
+    dispatch(setSearchField({ key, value }));
   }
 
   function updateDonorForm(key, value) {
-    setDonorForm((prev) => ({ ...prev, [key]: value }));
+    dispatch(setDonorField({ key, value }));
   }
 
-  function resetDonorOtp() {
-    setDonorOtpSent(false);
-    setDonorOtpValue('');
-    setDonorOtpVerified(false);
-    setDonors([]);
-    setDonorSearched(false);
+  async function refreshUserState(currentUserId = userId) {
+    if (!currentUserId) {
+      return;
+    }
+    const [active, requestRows, responseRows] = await Promise.all([
+      apiRequest(`/api/backend/requests/user/${currentUserId}/active`).catch(() => ({ active: false })),
+      apiRequest(`/api/backend/requests/user/${currentUserId}`).catch(() => []),
+      apiRequest(`/api/backend/requests/user/${currentUserId}/responses`).catch(() => []),
+    ]);
+    dispatch(setActiveRequest(Boolean(active.active)));
+    dispatch(setRequests(requestRows));
+    dispatch(setResponses(responseRows));
+  }
+
+  function closeDonorLogin() {
+    dispatch(setDonorLoginOpen(false));
+  }
+
+  function openDonorLogin() {
+    dispatch(setDonorLoginOpen(true));
+    dispatch(clearStatus());
   }
 
   async function sendDonorOtp() {
-    if (!/^\d{10}$/.test(donorPhone.trim())) {
-      setError('Enter a valid 10-digit phone before sending OTP.');
+    if (!/^\d{14}$/.test(abhaId.trim())) {
+      dispatch(setError('Invalid ABHA'));
       return;
     }
 
-    setLoading(true);
-    setError('');
-    setMessage('');
+    dispatch(setLoading(true));
+    dispatch(clearStatus());
 
     try {
-      await apiRequest('/api/backend/auth/send-otp', {
+      const result = await apiRequest('/api/backend/auth/send-otp', {
         method: 'POST',
-        body: JSON.stringify({ phone: donorPhone.trim() }),
+        body: JSON.stringify({ abhaId: abhaId.trim() }),
       });
-      setDonorOtpSent(true);
-      setMessage('OTP sent. Use 1234 for now.');
-    } catch (e) {
-      setError(`Could not send OTP: ${e.message}`);
+      dispatch(setProfile({ name: result.name, phone: result.phone }));
+      dispatch(setOtpSent(true));
+      dispatch(setStatusText('OTP sent'));
+    } catch {
+      dispatch(setError('OTP send failed'));
     } finally {
-      setLoading(false);
+      dispatch(setLoading(false));
     }
   }
 
   async function verifyDonorOtp() {
-    if (!donorOtpSent) {
-      setError('Send OTP first.');
+    if (!otpSent || !otpValue.trim()) {
+      dispatch(setError('Invalid OTP'));
       return;
     }
 
-    if (!donorOtpValue.trim()) {
-      setError('Enter OTP to verify.');
-      return;
-    }
-
-    setLoading(true);
-    setError('');
-    setMessage('');
+    dispatch(setLoading(true));
+    dispatch(clearStatus());
 
     try {
-      await apiRequest('/api/backend/auth/verify-otp', {
+      const verified = await apiRequest('/api/backend/auth/verify-otp', {
         method: 'POST',
-        body: JSON.stringify({ phone: donorPhone.trim(), otp: donorOtpValue.trim() }),
+        body: JSON.stringify({ abhaId: abhaId.trim(), otp: otpValue.trim() }),
       });
-      setDonorOtpVerified(true);
-      setMessage('OTP verified.');
-    } catch (e) {
-      setDonorOtpVerified(false);
-      setError(`OTP verification failed: ${e.message}`);
+      dispatch(setProfile({ name: verified.name, phone: verified.phone }));
+      dispatch(setOtpVerified(true));
+
+      const user = await apiRequest('/api/backend/users/get-or-create', {
+        method: 'POST',
+        body: JSON.stringify({ abhaId: abhaId.trim() }),
+      });
+      dispatch(setUserId(user.userId));
+      await refreshUserState(user.userId);
+
+      dispatch(setStatusText('Verified'));
+      dispatch(setDonorLoginOpen(false));
+      dispatch(setScreen('donors'));
+    } catch {
+      dispatch(setOtpVerified(false));
+      dispatch(setError('OTP verification failed'));
     } finally {
-      setLoading(false);
+      dispatch(setLoading(false));
     }
   }
 
@@ -189,10 +253,7 @@ export default function App() {
       apiRequest('/api/redcross/centres').catch(() => []),
     ]);
 
-    const merged = [
-      ...whoBanks.map(normalizeWhoBank),
-      ...redcrossCentres.map(normalizeRedcrossCentre),
-    ];
+    const merged = [...whoBanks.map(normalizeWhoBank), ...redcrossCentres.map(normalizeRedcrossCentre)];
 
     return merged.filter((row) => {
       const samePincode = !pincode || String(row.pincode) === String(pincode);
@@ -202,38 +263,56 @@ export default function App() {
   }
 
   async function fetchDonors(group, pincode) {
-    const [whoDonors, redcrossPeople] = await Promise.all([
-      apiRequest('/api/who/donors').catch(() => []),
-      apiRequest('/api/redcross/people').catch(() => []),
-    ]);
+    const query = new URLSearchParams({
+      bloodGroup: group || '',
+      pincode: pincode || '',
+      offset: '0',
+      limit: '200',
+    }).toString();
 
-    const merged = [...whoDonors.map(normalizeWhoDonor), ...redcrossPeople.map(normalizeRedcrossDonor)];
+    const result = await apiRequest(`/api/backend/donors/search?${query}`);
+    const rows = Array.isArray(result?.donors) ? result.donors : [];
+    const mapped = rows.map((row) => ({
+      name: row.name || '-',
+      abhaId: row.donorId || '-',
+      bloodGroup: row.bloodGroup || '-',
+      pincode: row.pincode || '-',
+      location: row.location || '-',
+      phone: row.phone || '-',
+      source: row.source || '-',
+    }));
 
-    return merged.filter((row) => {
-      const sameGroup = !group || row.bloodGroup === group;
-      const samePincode = !pincode || String(row.pincode) === String(pincode);
-      return sameGroup && samePincode;
-    });
+    return {
+      donors: mapped,
+      totalMatched: Number(result?.totalMatched || mapped.length),
+    };
   }
 
   async function runSearch() {
     if (!canSearch) {
-      setError('Fill all fields. Phone must be 10 digits and pincode must be 6 digits.');
+      dispatch(setError('Invalid input'));
+      return;
+    }
+    if (activeRequest) {
+      dispatch(setError('Active request exists'));
       return;
     }
 
-    setLoading(true);
-    setError('');
-    setMessage('');
+    dispatch(setLoading(true));
+    dispatch(clearStatus());
 
     try {
-      const user = await apiRequest('/api/backend/users/get-or-create', {
-        method: 'POST',
-        body: JSON.stringify({ name: form.patientName.trim(), phone: form.phone.trim() }),
-      });
-      setUserId(user.userId);
+      let currentUserId = userId;
+      if (!currentUserId) {
+        const user = await apiRequest('/api/backend/users/get-or-create', {
+          method: 'POST',
+          body: JSON.stringify({ abhaId: '99990000111122' }),
+        });
+        currentUserId = user.userId;
+        dispatch(setUserId(currentUserId));
+      }
 
-      const createdSearch = await apiRequest(`/api/backend/searches/${user.userId}`, {
+      const createdSearch = await apiRequest(`/api/backend/searches/${currentUserId}`, {
         method: 'POST',
         body: JSON.stringify({
           hospitalName: form.hospitalName.trim(),
@@ -243,140 +322,365 @@ export default function App() {
         }),
       });
 
-      setSearchId(createdSearch.searchId);
-
+      dispatch(setSearchId(createdSearch.searchId));
       const bankRows = await fetchBanks(form.bloodGroup, form.bloodComponent, form.hospitalPincode.trim());
-      setBanks(bankRows);
-      setScreen('results');
-    } catch (e) {
-      setError(`Search failed: ${e.message}`);
+      dispatch(setBanks(bankRows));
+      dispatch(setScreen('blood-banks'));
+      dispatch(setStatusText('Search complete'));
+      await refreshUserState(currentUserId);
+    } catch {
+      dispatch(setError('Search failed'));
     } finally {
-      setLoading(false);
+      dispatch(setLoading(false));
     }
   }
 
   async function runDonorSearch() {
-    if (!donorOtpVerified) {
-      setError('Verify OTP first. Use 1234.');
+    if (!otpVerified) {
+      dispatch(setError('Login required'));
+      return;
+    }
+    if (activeRequest) {
+      dispatch(setError('Active request exists'));
       return;
     }
 
-    if (!donorForm.bloodGroup || !donorForm.pincode.trim()) {
-      setError('Fill donor blood group and pincode.');
-      return;
-    }
-
-    setLoading(true);
-    setError('');
-    setMessage('');
+    dispatch(setLoading(true));
+    dispatch(clearStatus());
 
     try {
-      const donorRows = await fetchDonors(donorForm.bloodGroup, donorForm.pincode.trim());
-      setDonors(donorRows);
-      setDonorSearched(true);
-      setScreen('donors');
-    } catch (e) {
-      setError(`Donor search failed: ${e.message}`);
+      const donorResult = await fetchDonors(donorForm.bloodGroup, donorForm.pincode.trim());
+      dispatch(setDonors(donorResult.donors));
+      dispatch(setMatchedCount(donorResult.totalMatched));
+      dispatch(setDonorSearched(true));
+      dispatch(setConfirmOpen(true));
+      dispatch(setStatusText('Matches loaded'));
+    } catch {
+      dispatch(setError('Search failed'));
     } finally {
-      setLoading(false);
+      dispatch(setLoading(false));
     }
   }
 
-  async function createRequest() {
+  async function confirmAndCreateRequest() {
     if (!searchId) {
-      setError('Search ID not available. Please search again.');
+      dispatch(setError('Search first'));
       return;
     }
 
-    setLoading(true);
-    setError('');
-    setMessage('');
-
+    dispatch(setLoading(true));
+    dispatch(clearStatus());
     try {
       const request = await apiRequest(`/api/backend/requests/${searchId}`, {
         method: 'POST',
         body: JSON.stringify({
-          bloodGroup: form.bloodGroup,
+          bloodGroup: donorForm.bloodGroup,
           component: form.bloodComponent,
           unitsRequested: Number(form.unitsRequested) || 1,
+          matchedCount,
         }),
       });
-      setLastRequestId(request.requestId);
-      setMessage(`Request created successfully. Request ID: ${request.requestId}`);
-    } catch (e) {
-      setError(`Could not create request: ${e.message}`);
+      dispatch(setLastRequestId(request.requestId));
+      dispatch(setConfirmOpen(false));
+      dispatch(setStatusText('Request created'));
+      await refreshUserState();
+    } catch {
+      dispatch(setError('Request failed'));
     } finally {
-      setLoading(false);
+      dispatch(setLoading(false));
     }
   }
 
+  async function onReRequest(requestId) {
+    dispatch(setLoading(true));
+    dispatch(clearStatus());
+    try {
+      await apiRequest(`/api/backend/requests/${requestId}/re-request`, { method: 'POST' });
+      dispatch(setStatusText('Re-request created'));
+      await refreshUserState();
+    } catch {
+      dispatch(setError('Re-request failed'));
+    } finally {
+      dispatch(setLoading(false));
+    }
+  }
+
+  async function onDispatchNext(requestId) {
+    dispatch(setLoading(true));
+    dispatch(clearStatus());
+    try {
+      await apiRequest(`/api/backend/requests/${requestId}/dispatch-next`, { method: 'POST' });
+      dispatch(setStatusText('Next 20 notified'));
+      await refreshUserState();
+    } catch {
+      dispatch(setError('Dispatch failed'));
+    } finally {
+      dispatch(setLoading(false));
+    }
+  }
+
+  function onTabChange(_event, newValue) {
+    if (newValue === 0) {
+      dispatch(setScreen('blood-banks'));
+      return;
+    }
+
+    if (!otpVerified) {
+      openDonorLogin();
+      return;
+    }
+
+    dispatch(setScreen('donors'));
+  }
+
   return (
-    <div className="app-shell">
-      <header className="page-header">
-        <div>
-          <p className="eyebrow">Hemo-Connect</p>
-          <h1>Blood Request Portal</h1>
-          <p className="muted">Simple prototype-style interface for blood banks and donors.</p>
-        </div>
+    <Box className="app-bg">
+      <AppBar position="static" elevation={0} className="app-header">
+        <Toolbar className="header-toolbar">
+          <Box className="brand-row">
+            <WaterDropOutlinedIcon className="drop-icon" />
+            <Typography variant="h6" className="brand-title">Hemo Connect</Typography>
+          </Box>
+          <Tabs value={tabIndex(screen)} onChange={onTabChange} className="main-tabs" textColor="inherit" indicatorColor="secondary">
+            <Tab label="Search for Blood Banks" />
+            <Tab label="Search for Donors" />
+          </Tabs>
+        </Toolbar>
+      </AppBar>
 
-        <div className="tabs" role="tablist" aria-label="Screens">
-          <button type="button" onClick={() => setScreen('blood-banks')} disabled={loading} aria-pressed={screen !== 'donors'}>
-            Blood Banks
-          </button>
-          <button type="button" onClick={() => setScreen('donors')} disabled={loading} aria-pressed={screen === 'donors'}>
-            Donors
-          </button>
-        </div>
-      </header>
+      <Container maxWidth="lg" className="content-wrap">
+        {error ? <Paper className="error-strip">{error}</Paper> : null}
 
-      <StatusBanner error={error} message={message} loading={loading} />
+        {screen === 'blood-banks' && (
+          <Paper className="panel" variant="outlined" elevation={0}>
+            <Box className="form-grid">
+              <TextField label="Patient Name" value={form.patientName} onChange={(e) => updateForm('patientName', e.target.value)} />
+              <TextField label="Phone" value={form.phone} onChange={(e) => updateForm('phone', e.target.value)} />
+              <FormControl>
+                <InputLabel>Blood Group</InputLabel>
+                <Select value={form.bloodGroup} label="Blood Group" onChange={(e) => updateForm('bloodGroup', e.target.value)}>
+                  {BLOOD_GROUPS.map((group) => <MenuItem key={group} value={group}>{group}</MenuItem>)}
+                </Select>
+              </FormControl>
+              <FormControl>
+                <InputLabel>Component</InputLabel>
+                <Select value={form.bloodComponent} label="Component" onChange={(e) => updateForm('bloodComponent', e.target.value)}>
+                  {COMPONENTS.map((component) => <MenuItem key={component} value={component}>{component}</MenuItem>)}
+                </Select>
+              </FormControl>
+              <TextField label="Hospital" value={form.hospitalName} onChange={(e) => updateForm('hospitalName', e.target.value)} />
+              <TextField label="Pincode" value={form.hospitalPincode} onChange={(e) => updateForm('hospitalPincode', e.target.value)} />
+            </Box>
 
-      <main className="content-grid">
-        {screen === 'blood-banks' ? (
-          <SearchForm form={form} onChange={updateForm} onSearch={runSearch} loading={loading} />
-        ) : screen === 'donors' ? (
-          <>
-            <DonorSearchSection
-              phone={donorPhone}
-              otpValue={donorOtpValue}
-              otpSent={donorOtpSent}
-              otpVerified={donorOtpVerified}
-              loading={loading}
-              donorForm={donorForm}
-              onPhoneChange={(value) => {
-                setDonorPhone(value);
-                resetDonorOtp();
-              }}
-              onSendOtp={sendDonorOtp}
-              onOtpChange={setDonorOtpValue}
-              onVerifyOtp={verifyDonorOtp}
-              onDonorChange={updateDonorForm}
-              onSearchDonors={runDonorSearch}
-            />
-          </>
-        ) : (
-          <ResultsTable
-            banks={banks}
-            form={form}
-            onCreateRequest={createRequest}
-            onBack={() => setScreen('blood-banks')}
-            loading={loading}
-            userId={userId}
-            searchId={searchId}
-            lastRequestId={lastRequestId}
-          />
+            <Box className="action-row">
+              <Button className="primary-btn" variant="contained" onClick={runSearch} disabled={loading || activeRequest}>Search</Button>
+            </Box>
+
+            <Box className="results-wrap">
+              {banks.length === 0 ? (
+                <Paper variant="outlined" className="empty-box">No records found</Paper>
+              ) : (
+                <TableContainer component={Paper} variant="outlined">
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Name</TableCell>
+                        <TableCell>Category</TableCell>
+                        <TableCell>Pincode</TableCell>
+                        <TableCell>Address</TableCell>
+                        <TableCell>Contact</TableCell>
+                        <TableCell>Source</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {banks.map((bank, idx) => (
+                        <TableRow key={`${bank.name}-${idx}`}>
+                          <TableCell>{bank.name}</TableCell>
+                          <TableCell>{bank.category}</TableCell>
+                          <TableCell>{bank.pincode}</TableCell>
+                          <TableCell>{bank.address}</TableCell>
+                          <TableCell>{bank.contact}</TableCell>
+                          <TableCell>{bank.source}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              )}
+            </Box>
+          </Paper>
         )}
 
-        {screen === 'donors' ? (
-          <DonorResultsTable
-            donors={donors}
-            donorForm={donorForm}
-            onBack={() => setScreen('donors')}
-            loading={loading}
-            searched={donorSearched}
-          />
-        ) : null}
-      </main>
-    </div>
+        {screen === 'donors' && (
+          <Box className="stack-wrap">
+            <Paper className="panel" variant="outlined" elevation={0}>
+              <Box className="form-grid">
+                <FormControl>
+                  <InputLabel>Blood Group</InputLabel>
+                  <Select value={donorForm.bloodGroup} label="Blood Group" onChange={(e) => updateDonorForm('bloodGroup', e.target.value)}>
+                    {BLOOD_GROUPS.map((group) => <MenuItem key={group} value={group}>{group}</MenuItem>)}
+                  </Select>
+                </FormControl>
+                <TextField label="Pincode" value={donorForm.pincode} onChange={(e) => updateDonorForm('pincode', e.target.value)} />
+              </Box>
+              <Box className="action-row">
+                <Button className="primary-btn" variant="contained" onClick={runDonorSearch} disabled={loading || !otpVerified || activeRequest}>Search Donors</Button>
+              </Box>
+
+              {searched && (
+                <Box className="results-wrap">
+                  {donors.length === 0 ? (
+                    <Paper variant="outlined" className="empty-box">No records found</Paper>
+                  ) : (
+                    <TableContainer component={Paper} variant="outlined">
+                      <Table size="small">
+                        <TableHead>
+                          <TableRow>
+                            <TableCell>Name</TableCell>
+                            <TableCell>ABHA</TableCell>
+                            <TableCell>Blood Group</TableCell>
+                            <TableCell>Pincode</TableCell>
+                            <TableCell>Location</TableCell>
+                            <TableCell>Phone</TableCell>
+                            <TableCell>Source</TableCell>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {donors.map((donor, idx) => (
+                            <TableRow key={`${donor.name}-${idx}`}>
+                              <TableCell>{donor.name}</TableCell>
+                              <TableCell>{donor.abhaId}</TableCell>
+                              <TableCell>{donor.bloodGroup}</TableCell>
+                              <TableCell>{donor.pincode}</TableCell>
+                              <TableCell>{donor.location}</TableCell>
+                              <TableCell>{donor.phone}</TableCell>
+                              <TableCell>{donor.source}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </TableContainer>
+                  )}
+                </Box>
+              )}
+            </Paper>
+
+            <Accordion className="accordion" elevation={0}>
+              <AccordionSummary expandIcon={<ExpandMoreIcon />}>Requests</AccordionSummary>
+              <AccordionDetails>
+                {requests.length === 0 ? (
+                  <Paper variant="outlined" className="empty-box">No records found</Paper>
+                ) : (
+                  <TableContainer component={Paper} variant="outlined">
+                    <Table size="small">
+                      <TableHead>
+                        <TableRow>
+                          <TableCell>Request ID</TableCell>
+                          <TableCell>Blood Group</TableCell>
+                          <TableCell>Component</TableCell>
+                          <TableCell>Status</TableCell>
+                          <TableCell>Expiry</TableCell>
+                          <TableCell>Contacted</TableCell>
+                          <TableCell>Action</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {requests.map((row) => (
+                          <TableRow key={row.requestId}>
+                            <TableCell>{row.requestId}</TableCell>
+                            <TableCell>{row.bloodGroup}</TableCell>
+                            <TableCell>{row.component}</TableCell>
+                            <TableCell>{row.status}</TableCell>
+                            <TableCell>{String(row.expiresAt || '-')}</TableCell>
+                            <TableCell>{row.numberOfDonorsContacted}</TableCell>
+                            <TableCell>
+                              <Box className="inline-actions">
+                                <Button size="small" onClick={() => onReRequest(row.requestId)} disabled={!row.canReRequest}>Re-request</Button>
+                                <Button size="small" onClick={() => onDispatchNext(row.requestId)}>Next 20</Button>
+                              </Box>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                )}
+              </AccordionDetails>
+            </Accordion>
+
+            <Accordion className="accordion" elevation={0}>
+              <AccordionSummary expandIcon={<ExpandMoreIcon />}>Donor Responses</AccordionSummary>
+              <AccordionDetails>
+                {responses.length === 0 ? (
+                  <Paper variant="outlined" className="empty-box">No records found</Paper>
+                ) : (
+                  <TableContainer component={Paper} variant="outlined">
+                    <Table size="small">
+                      <TableHead>
+                        <TableRow>
+                          <TableCell>Request ID</TableCell>
+                          <TableCell>Name</TableCell>
+                          <TableCell>ABHA</TableCell>
+                          <TableCell>Phone</TableCell>
+                          <TableCell>Status</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {responses.map((row) => (
+                          <TableRow key={row.responseId}>
+                            <TableCell>{row.requestId}</TableCell>
+                            <TableCell>{row.donorName}</TableCell>
+                            <TableCell>{row.abhaId || '-'}</TableCell>
+                            <TableCell>{row.phoneNumber}</TableCell>
+                            <TableCell>{row.responseStatus}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                )}
+              </AccordionDetails>
+            </Accordion>
+          </Box>
+        )}
+      </Container>
+
+      <Box component="footer" className="app-footer">
+        <Container maxWidth="lg" className="footer-inner">
+          <Typography variant="body2">{loading ? 'Loading...' : statusText || 'Ready'}</Typography>
+          <Typography variant="body2">User: {name || '-'}</Typography>
+          <Typography variant="body2">Mobile: {phone || '-'}</Typography>
+          <Typography variant="body2">Last Request: {lastRequestId || '-'}</Typography>
+        </Container>
+      </Box>
+
+      <Dialog open={donorLoginOpen} onClose={closeDonorLogin} fullWidth maxWidth="xs">
+        <DialogTitle>Donor Login</DialogTitle>
+        <DialogContent>
+          <Box className="login-grid">
+            <TextField label="ABHA ID (14 digits)" value={abhaId} onChange={(e) => { dispatch(setAbhaId(e.target.value)); dispatch(setOtpSent(false)); dispatch(setOtpVerified(false)); dispatch(setOtpValue('')); }} fullWidth margin="dense" />
+            <TextField label="OTP" value={otpValue} onChange={(e) => dispatch(setOtpValue(e.target.value))} fullWidth margin="dense" />
+            <Box className="action-row">
+              <Button variant="outlined" onClick={sendDonorOtp} disabled={loading || !/^\d{14}$/.test(abhaId.trim())}>Send OTP</Button>
+              <Button variant="contained" className="primary-btn" onClick={verifyDonorOtp} disabled={loading || !otpSent}>Verify</Button>
+            </Box>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closeDonorLogin}>Cancel</Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={confirmOpen} onClose={() => dispatch(setConfirmOpen(false))} fullWidth maxWidth="xs">
+        <DialogTitle>Confirm Request</DialogTitle>
+        <DialogContent>
+          <Typography>{matchedCount} matched. Send to nearest 20?</Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => dispatch(setConfirmOpen(false))}>Cancel</Button>
+          <Button onClick={confirmAndCreateRequest} className="primary-btn" variant="contained">Confirm</Button>
+        </DialogActions>
+      </Dialog>
+    </Box>
   );
 }

@@ -8,8 +8,8 @@ Usage:
     python3 seed.py
 
 Scale control:
-    BANKS_PER_RUN  = 500        ->  500 new blood banks per run
-    DONORS_PER_RUN = 1_000_000  ->  1 million new donors per run
+    BANKS_PER_RUN  = 20         ->  20 new blood banks per run
+    DONORS_PER_RUN = 100        ->  100 new donors per run
 
 Runs APPEND — data is never wiped. Each donor gets a guaranteed-unique
 UUID-based identifier so re-runs never produce duplicates.
@@ -17,9 +17,12 @@ Run once → ~1 M records. Run 10× → ~10 M records.
 """
 
 import hashlib
+import json
 import random
+import re
 import uuid
 from datetime import date, datetime, timedelta
+from pathlib import Path
 
 import psycopg2
 from psycopg2.extras import execute_values
@@ -27,8 +30,8 @@ from psycopg2.extras import execute_values
 # ---------------------------------------------------------------------------
 # Tune per run — adjust without restarting Docker
 # ---------------------------------------------------------------------------
-BANKS_PER_RUN  = 500          # new blood banks to insert each invocation
-DONORS_PER_RUN = 1_000_000    # new donors to insert each invocation
+BANKS_PER_RUN  = 20           # new blood banks to insert each invocation
+DONORS_PER_RUN = 100          # new donors to insert each invocation
 BATCH_SIZE     = 10_000       # rows per executemany batch (keeps memory bounded)
 
 # ---------------------------------------------------------------------------
@@ -51,12 +54,28 @@ WHO_DSN = dict(
 BLOOD_GROUP_DIST = {
     "O+": 37, "B+": 25, "A+": 22, "AB+": 7,
     "O-":  3, "B-":  3, "A-":  2, "AB-": 1,
+    "BOMBAY": 0.2, "RH NULL": 0.05,
 }
 BLOOD_GROUPS = list(BLOOD_GROUP_DIST.keys())
 BG_WEIGHTS   = list(BLOOD_GROUP_DIST.values())
 
 REDCROSS_COMPONENTS = ["Whole Blood", "Packed RBC", "Fresh Frozen Plasma", "Platelets", "Cryoprecipitate"]
 WHO_COMPONENTS      = ["Whole Blood", "Packed RBC", "Fresh Frozen Plasma", "Platelets", "Cryoprecipitate"]
+
+
+def load_pincode_pool():
+    file_path = Path(__file__).resolve().parents[1] / "pincode.js"
+    if not file_path.exists():
+        return []
+
+    raw = file_path.read_text(encoding="utf-8")
+    body = re.sub(r"^\s*let\s+pincodelist\s*=\s*", "", raw, flags=re.DOTALL)
+    body = re.sub(r"\s*;\s*module\.exports\s*=\s*pincodelist\s*;\s*$", "", body, flags=re.DOTALL)
+    data = json.loads(body)
+    return list(data.keys())
+
+
+PINCODE_POOL = load_pincode_pool()
 
 # ---------------------------------------------------------------------------
 # City master -- (city, state, population_weight, [real 6-digit pincodes])
@@ -452,7 +471,7 @@ def seed_redcross(conn):
     print(f"[Red Cross] Inserting {BANKS_PER_RUN} new banks ...")
     for _ in range(BANKS_PER_RUN):
         city, state, _w, pincodes = pick_city()
-        postal   = random.choice(pincodes)
+        postal   = random.choice(PINCODE_POOL) if PINCODE_POOL else random.choice(pincodes)
         name     = make_bank_name(city, REDCROSS_NAME_TEMPLATES)
         phone    = rnd_mobile()
         email    = rnd_email(name)
@@ -497,7 +516,7 @@ def seed_redcross(conn):
         for _ in range(batch_n):
             bb_id    = random.choice(all_bb_ids)
             city, state, _w, pincodes = pick_city()
-            postal   = random.choice(pincodes)
+            postal   = random.choice(PINCODE_POOL) if PINCODE_POOL else random.choice(pincodes)
             fname    = full_name()
             nat_id   = unique_id()
             b_type   = pick_blood_group()
@@ -536,7 +555,7 @@ def seed_who(conn):
     print(f"[WHO] Inserting {BANKS_PER_RUN} new banks ...")
     for _ in range(BANKS_PER_RUN):
         city, state, _w, pincodes = pick_city()
-        pincode  = random.choice(pincodes)
+        pincode  = random.choice(PINCODE_POOL) if PINCODE_POOL else random.choice(pincodes)
         name     = make_bank_name(city, WHO_NAME_TEMPLATES)
         phone    = rnd_mobile()
         email    = rnd_email(name)
@@ -581,7 +600,7 @@ def seed_who(conn):
         for _ in range(batch_n):
             bb_id    = random.choice(all_bb_ids)
             city, state, _w, pincodes = pick_city()
-            pincode  = random.choice(pincodes)
+            pincode  = random.choice(PINCODE_POOL) if PINCODE_POOL else random.choice(pincodes)
             fname    = full_name()
             a_hash   = unique_id()
             bg       = pick_blood_group()

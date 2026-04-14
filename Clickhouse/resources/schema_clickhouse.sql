@@ -54,6 +54,8 @@ CREATE TABLE IF NOT EXISTS blood_ops.dim_location (
     city String,
     state String,
     street_or_address String,
+    latitude Float64,
+    longitude Float64,
     updated_at DateTime DEFAULT now()
 )
 ENGINE = ReplacingMergeTree(updated_at)

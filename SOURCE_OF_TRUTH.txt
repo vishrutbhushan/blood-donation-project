@@ -1,0 +1,22 @@
+BLOOD DONATION PLATFORM - SOURCE OF TRUTH
+
+1. Redcross and WHO are source-system services; backend must not embed their extraction logic.
+2. ETL is the integration layer that extracts from source systems and normalizes records for downstream stores.
+3. Latitude and longitude resolution from pincode happens in ETL, not in source-system APIs.
+4. ETL must load both blood bank and donor datasets into Elasticsearch and ClickHouse.
+5. Backend operational blood-bank lookup APIs use Elasticsearch, not ClickHouse.
+6. ClickHouse is reserved for analytics/reporting and Grafana-facing use cases.
+7. Nearest blood bank lookup uses Elasticsearch native geo distance sort and returns max 20 records.
+8. Elasticsearch bank and donor indexes must keep location as geo_point.
+9. ETL startup must ensure Elasticsearch templates/mappings are created before indexing records.
+10. Missing pincode mappings must degrade safely to default coordinates and continue ETL processing.
+11. Public API contracts must be typed DTO/entity contracts, not Map-based request/response payloads.
+12. Service/controller method signatures should prefer typed objects over generic map payloads.
+13. API error responses must remain typed DTO responses.
+14. PostgreSQL remains system-of-record for users, searches, requests, and responses.
+15. Redcross and WHO repository SQL must be defined as class-level final constants, not inline per-function query strings.
+16. Redcross and WHO DTO classes must use Lombok for boilerplate reduction and consistency.
+17. Elasticsearch backend integration must use a class-level query template and typed response model mapping.
+18. Deterministic behavior and fail-fast validation are mandatory for invalid API inputs.
+19. Internal ETL in-memory state may use Map structures where required for merge/index operations.
+20. Map usage is acceptable for internal ETL storage mechanics, but not for external API contracts.

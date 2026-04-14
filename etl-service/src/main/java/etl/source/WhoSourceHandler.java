@@ -4,8 +4,8 @@ import etl.constants.Constants;
 import etl.extract.who.WhoExtractor;
 import etl.model.EtlBatch;
 import etl.transform.who.WhoTransformPipeline;
+import etl.util.PincodeGeoMap;
 import java.util.List;
-import java.util.Map;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -29,7 +29,7 @@ public class WhoSourceHandler implements SourceHandler {
     }
 
     @Override
-    public EtlBatch transform(Object payload, Map<String, Object> geoMap) {
+    public EtlBatch transform(Object payload, PincodeGeoMap geoMap) {
         return transformer.run(payload, geoMap);
     }
 

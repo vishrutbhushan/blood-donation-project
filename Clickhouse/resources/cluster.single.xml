@@ -1,0 +1,12 @@
+<clickhouse>
+  <remote_servers>
+    <hemo_cluster>
+      <shard>
+        <replica>
+          <host>clickhouse</host>
+          <port>9000</port>
+        </replica>
+      </shard>
+    </hemo_cluster>
+  </remote_servers>
+</clickhouse>
