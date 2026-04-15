@@ -22,7 +22,8 @@ public class BloodBankService {
               "query": {
                 "bool": {
                   "filter": [
-                    { "exists": { "field": "location" } }
+                                        { "exists": { "field": "location" } }
+                                        %s
                   ],
                   "must_not": [
                     { "geo_distance": { "distance": "1m", "location": { "lat": 0, "lon": 0 } } }
@@ -49,8 +50,13 @@ public class BloodBankService {
     }
 
     public List<BloodBankDTO> findNearestBloodBanks(Double userLatitude, Double userLongitude) {
+        return findNearestBloodBanks(userLatitude, userLongitude, null, null);
+    }
+
+    public List<BloodBankDTO> findNearestBloodBanks(Double userLatitude, Double userLongitude, String bloodGroup, String component) {
         try {
-            String queryBody = String.format(Locale.US, NEAREST_BANKS_QUERY_TEMPLATE, userLatitude, userLongitude);
+            String optionalFilters = buildOptionalFilters(bloodGroup, component);
+            String queryBody = String.format(Locale.US, NEAREST_BANKS_QUERY_TEMPLATE, optionalFilters, userLatitude, userLongitude);
             EsSearchResponse response = elasticsearchClient.post()
                 .uri("/bb_inventory_current/_search")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -100,6 +106,28 @@ public class BloodBankService {
 
     private String emptyToBlank(String value) {
         return value == null ? "" : value;
+    }
+
+    private String buildOptionalFilters(String bloodGroup, String component) {
+        StringBuilder filters = new StringBuilder();
+        if (bloodGroup != null && !bloodGroup.isBlank()) {
+            filters.append(",\n                    { \"term\": { \"blood_group\": \"")
+                .append(escape(bloodGroup.trim()))
+                .append("\" } }");
+        }
+        if (component != null && !component.isBlank()) {
+            String escapedComponent = escape(component.trim());
+            filters.append(",\n                    { \"bool\": { \"should\": [")
+                .append("{ \"term\": { \"component\": \"").append(escapedComponent).append("\" } },")
+                .append("{ \"term\": { \"component_type\": \"").append(escapedComponent).append("\" } },")
+                .append("{ \"term\": { \"blood_component\": \"").append(escapedComponent).append("\" } }")
+                .append("], \"minimum_should_match\": 1 } }");
+        }
+        return filters.toString();
+    }
+
+    private String escape(String value) {
+        return value.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 
     private String emptyToDefault(String value, String defaultValue) {

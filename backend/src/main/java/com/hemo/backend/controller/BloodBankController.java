@@ -13,7 +13,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
 @RestController
-@RequestMapping("/api/blood-banks")
+@RequestMapping({"/blood-banks", "/api/blood-banks"})
 @Slf4j
 public class BloodBankController {
     private final BloodBankService bloodBankService;
@@ -34,17 +34,20 @@ public class BloodBankController {
     }
 
     @GetMapping("/search")
-    public List<BloodBankDTO> searchByPincode(@RequestParam String pincode) {
+    public List<BloodBankDTO> searchByPincode(
+            @RequestParam String pincode,
+            @RequestParam(required = false) String bloodGroup,
+            @RequestParam(required = false) String component) {
         PincodeGeoService.GeoPoint geoPoint = pincodeGeoService.resolve(pincode)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported pincode"));
 
-        List<BloodBankDTO> nearest = bloodBankService.findNearestBloodBanks(geoPoint.lat(), geoPoint.lon());
+        List<BloodBankDTO> nearest = bloodBankService.findNearestBloodBanks(geoPoint.lat(), geoPoint.lon(), bloodGroup, component);
         List<BloodBankDTO> exactPincode = nearest.stream()
                 .filter(bank -> pincode.equals(bank.getPincode()))
                 .toList();
 
         List<BloodBankDTO> response = exactPincode.isEmpty() ? nearest : exactPincode;
-        log.info("blood bank search by pincode={} returned={}", pincode, response.size());
+        log.info("blood bank search by pincode={} bloodGroup={} component={} returned={}", pincode, bloodGroup, component, response.size());
         return response;
     }
 }

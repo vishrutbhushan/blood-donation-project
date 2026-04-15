@@ -10,8 +10,12 @@ const donorSlice = createSlice({
     otpValue: '',
     otpVerified: false,
     form: { bloodGroup: '', pincode: '' },
-    donors: [],
     matchedCount: 0,
+    distanceBuckets: {
+      below10Km: 0,
+      below50Km: 0,
+      above50Km: 0,
+    },
     confirmOpen: false,
     searched: false,
   },
@@ -36,12 +40,11 @@ const donorSlice = createSlice({
       const { key, value } = action.payload;
       state.form[key] = value;
     },
-    setDonors(state, action) {
-      state.donors = action.payload;
-      state.matchedCount = action.payload.length;
-    },
     setMatchedCount(state, action) {
       state.matchedCount = action.payload;
+    },
+    setDistanceBuckets(state, action) {
+      state.distanceBuckets = action.payload;
     },
     setDonorSearched(state, action) {
       state.searched = action.payload;
@@ -56,8 +59,8 @@ const donorSlice = createSlice({
       state.otpSent = false;
       state.otpValue = '';
       state.otpVerified = false;
-      state.donors = [];
       state.matchedCount = 0;
+      state.distanceBuckets = { below10Km: 0, below50Km: 0, above50Km: 0 };
       state.confirmOpen = false;
       state.searched = false;
     },
@@ -71,8 +74,8 @@ export const {
   setOtpValue,
   setOtpVerified,
   setDonorField,
-  setDonors,
   setMatchedCount,
+  setDistanceBuckets,
   setDonorSearched,
   setConfirmOpen,
   resetDonorOtp,

@@ -7,6 +7,7 @@ import com.hemo.backend.entity.Response;
 import com.hemo.backend.exception.GlobalExceptionHandler.AppException;
 import com.hemo.backend.repository.RequestRepository;
 import com.hemo.backend.repository.ResponseRepository;
+import java.time.LocalDateTime;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -44,6 +45,19 @@ public class ResponseService {
                 .stream()
                 .map(this::toRecord)
                 .toList();
+    }
+
+    @Transactional
+    public ResponseRecordDTO markRespondedByPhone(String phoneNumber) {
+        List<Response> pending = responseRepository.findPendingByPhone(phoneNumber);
+        if (pending.isEmpty()) {
+            throw new AppException(HttpStatus.NOT_FOUND, "No pending donor contact found for phone number");
+        }
+
+        Response response = pending.get(0);
+        response.setResponseStatus("YES");
+        response.setRespondedAt(LocalDateTime.now());
+        return toRecord(responseRepository.save(response));
     }
 
     private ResponseRecordDTO toRecord(Response response) {

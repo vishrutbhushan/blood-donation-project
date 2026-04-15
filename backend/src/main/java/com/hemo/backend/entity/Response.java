@@ -50,6 +50,6 @@ public class Response {
     private String responseStatus;
 
     @CreationTimestamp
-    @Column(name = "responded_at", updatable = false)
+    @Column(name = "responded_at")
     private LocalDateTime respondedAt;
 }

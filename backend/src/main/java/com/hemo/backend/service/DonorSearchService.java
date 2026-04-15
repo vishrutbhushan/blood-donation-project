@@ -4,9 +4,13 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hemo.backend.dto.DonorCandidateDTO;
 import com.hemo.backend.dto.DonorSearchResponseDTO;
+import com.hemo.backend.dto.DonorSearchSummaryDTO;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.MediaType;
@@ -80,11 +84,21 @@ public class DonorSearchService {
     }
 
     public DonorSearchResponseDTO searchCompatibleDonors(String recipientBloodGroup, String pincode, int offset, int limit) {
+        return searchCompatibleDonors(recipientBloodGroup, pincode, offset, limit, Collections.emptyList());
+    }
+
+    public DonorSearchResponseDTO searchCompatibleDonors(
+            String recipientBloodGroup,
+            String pincode,
+            int offset,
+            int limit,
+            List<String> excludedDonorIds) {
         int safeOffset = Math.max(0, offset);
         int safeLimit = Math.max(1, Math.min(limit, 200));
         String normalizedRecipient = bloodCompatibilityService.normalize(recipientBloodGroup);
         List<String> compatibleGroups = bloodCompatibilityService.compatibleDonorGroups(normalizedRecipient);
         PincodeGeoService.GeoPoint geoPoint = pincodeGeoService.resolve(pincode).orElse(null);
+        Set<String> excluded = excludedDonorIds == null ? Collections.emptySet() : new HashSet<>(excludedDonorIds);
 
         try {
             String body = buildQuery(compatibleGroups, geoPoint, safeOffset, safeLimit);
@@ -97,13 +111,19 @@ public class DonorSearchService {
 
             JsonNode root = objectMapper.readTree(json == null ? "{}" : json);
             JsonNode hitsNode = root.path("hits");
-            long total = hitsNode.path("total").path("value").asLong(0L);
             JsonNode rows = hitsNode.path("hits");
             List<DonorCandidateDTO> donors = new ArrayList<>();
+            long below10 = 0;
+            long below50 = 0;
+            long above50 = 0;
 
             if (rows.isArray()) {
                 for (JsonNode row : rows) {
                     JsonNode src = row.path("_source");
+                    String donorId = src.path("source").asText("") + ":" + src.path("source_record_id").asText("");
+                    if (excluded.contains(donorId)) {
+                        continue;
+                    }
                     String city = src.path("city").asText("");
                     String state = src.path("state").asText("");
                     String location = city.isBlank() ? state : (state.isBlank() ? city : city + ", " + state);
@@ -113,8 +133,16 @@ public class DonorSearchService {
                         distance = sort.get(0).asDouble(0.0);
                     }
 
+                    if (distance < 10.0) {
+                        below10++;
+                    } else if (distance < 50.0) {
+                        below50++;
+                    } else {
+                        above50++;
+                    }
+
                     donors.add(DonorCandidateDTO.builder()
-                        .donorId(src.path("source").asText("") + ":" + src.path("source_record_id").asText(""))
+                        .donorId(donorId)
                         .name(src.path("name").asText("Unknown"))
                         .bloodGroup(src.path("blood_group").asText(""))
                         .phone(src.path("contact_number").asText(""))
@@ -126,16 +154,30 @@ public class DonorSearchService {
                 }
             }
 
+            long bucketedTotal = below10 + below50 + above50;
             return DonorSearchResponseDTO.builder()
                 .recipientBloodGroup(normalizedRecipient)
                 .compatibleDonorGroups(compatibleGroups)
-                .totalMatched(total)
+                .totalMatched(bucketedTotal)
+                .below10KmCount(below10)
+                .below50KmCount(below50)
+                .above50KmCount(above50)
                 .offset(safeOffset)
                 .limit(safeLimit)
                 .donors(donors)
                 .build();
         } catch (Exception ex) {
-            throw new IllegalStateException("Failed to query donors from Elasticsearch", ex);
+            return DonorSearchResponseDTO.builder()
+                .recipientBloodGroup(normalizedRecipient)
+                .compatibleDonorGroups(compatibleGroups)
+                .totalMatched(0L)
+                .below10KmCount(0L)
+                .below50KmCount(0L)
+                .above50KmCount(0L)
+                .offset(safeOffset)
+                .limit(safeLimit)
+                .donors(List.of())
+                .build();
         }
     }
 
@@ -159,5 +201,18 @@ public class DonorSearchService {
 
     private String escape(String value) {
         return value.replace("\\", "\\\\").replace("\"", "\\\"");
+    }
+
+    public DonorSearchSummaryDTO toSummary(DonorSearchResponseDTO response) {
+        return DonorSearchSummaryDTO.builder()
+            .recipientBloodGroup(response.getRecipientBloodGroup())
+            .compatibleDonorGroups(response.getCompatibleDonorGroups())
+            .totalMatched(response.getTotalMatched())
+            .below10KmCount(response.getBelow10KmCount())
+            .below50KmCount(response.getBelow50KmCount())
+            .above50KmCount(response.getAbove50KmCount())
+            .offset(response.getOffset())
+            .limit(response.getLimit())
+            .build();
     }
 }

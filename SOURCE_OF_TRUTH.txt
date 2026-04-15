@@ -1,46 +1,149 @@
 BLOOD DONATION PLATFORM - SOURCE OF TRUTH
 
-1. Redcross and WHO are source-system services; backend must not embed their extraction logic.
-2. ETL is the integration layer that extracts from source systems and normalizes records for downstream stores.
-3. Latitude and longitude resolution from pincode happens in ETL, not in source-system APIs.
-4. ETL must load both blood bank and donor datasets into Elasticsearch and ClickHouse.
-5. Backend operational blood-bank lookup APIs use Elasticsearch, not ClickHouse.
-6. ClickHouse is reserved for analytics/reporting and Grafana-facing use cases.
-7. Nearest blood bank lookup uses Elasticsearch native geo distance sort and returns max 20 records.
-8. Elasticsearch bank and donor indexes must keep location as geo_point.
-9. ETL startup must ensure Elasticsearch templates/mappings are created before indexing records.
-10. Missing pincode mappings must degrade safely to default coordinates and continue ETL processing.
-11. Public API contracts must be typed DTO/entity contracts, not Map-based request/response payloads.
-12. Service/controller method signatures should prefer typed objects over generic map payloads.
-13. API error responses must remain typed DTO responses.
-14. PostgreSQL remains system-of-record for users, searches, requests, and responses.
-15. Redcross and WHO repository SQL must be defined as class-level final constants, not inline per-function query strings.
-16. Redcross and WHO DTO classes must use Lombok for boilerplate reduction and consistency.
-17. Elasticsearch backend integration must use a class-level query template and typed response model mapping.
-18. Deterministic behavior and fail-fast validation are mandatory for invalid API inputs.
-19. Internal ETL in-memory state may use Map structures where required for merge/index operations.
-20. Map usage is acceptable for internal ETL storage mechanics, but not for external API contracts.
+Purpose:
+This document defines the required functional behavior (FRs) and the mandatory technical constraints/restrictions for the project.
 
-RUNBOOK FOR NEXT COPILOT AGENT (validated on 2026-04-15)
 
-21. Bring up the stack from repo root with `docker compose up -d --build` and verify with `docker compose ps`.
-22. Generate dummy source data and CSV preview with `python db-seeder/seed.py`.
-23. Confirm CSV overwrite behavior with 101 lines total (1 header + 100 rows): `Get-Content db-seeder/generated_seed_preview.csv | Measure-Object -Line`.
-24. Trigger ETL bulk load manually (bulk is not automatic): `GET http://localhost:8083/admin/etl/bulk-load`.
-25. Re-triggering the same API should return the idempotent response `bulk load already completed`.
-26. Validate Elasticsearch ingestion using container-local calls:
-	- `docker exec hemo-elasticsearch curl -s http://localhost:9200/donor_availability_current/_count`
-	- `docker exec hemo-elasticsearch curl -s http://localhost:9200/bb_inventory_current/_count`
-27. Validate ClickHouse ingestion:
-	- `docker exec hemo-clickhouse clickhouse-client --query "SELECT count() FROM blood_ops.dim_donor"`
-	- `docker exec hemo-clickhouse clickhouse-client --query "SELECT count() FROM blood_ops.dim_blood_bank"`
-28. Use CSV-driven donor validation (read blood group + pincode from `generated_seed_preview.csv` donor rows) and call `GET /donors/search` on backend; expected `totalMatched > 0`.
-29. Grafana validation path:
-	- Open `http://localhost:3000/login`.
-	- Login with `admin/admin`.
-	- If prompted, click Skip password update for local validation.
-	- Confirm landing on Grafana home and verify datasources via `GET /api/datasources` (basic auth admin/admin) includes Elasticsearch and ClickHouse.
-30. Auth OTP behavior for local runs is deterministic: use OTP `123456`; wrong OTP returns HTTP 401 with body `{"error":"Invalid OTP"}`.
-31. CSV-driven UI blood-bank validation uses data from `db-seeder/generated_seed_preview.csv`; one verified combination is pincode `144415`, group `O+`, component `Whole Blood`, which returns Redcross records in the first tab.
-32. CSV-driven donor validation uses donor rows from `db-seeder/generated_seed_preview.csv`; one verified combination is blood group `O+` and pincode `151210`, and backend `GET /donors/search` returns `totalMatched > 0`.
-33. Logging should stay minimal and controller-focused: log only important API triggers/results and exceptions at the controller/advice boundary; avoid service-level request logging unless it is part of ETL trigger visibility.
+SECTION A - FUNCTIONAL REQUIREMENTS (FR)
+
+FR-01 System Boundaries
+1. WHO and Redcross are simulated external source systems.
+2. ETL is the only component allowed to consume WHO and Redcross APIs.
+3. Backend and frontend user flows must not directly depend on WHO/Redcross APIs.
+
+FR-02 Data Provisioning
+1. Seeder must generate deterministic dummy source-style data.
+2. Seeder must overwrite and regenerate a CSV preview file for test validation.
+
+FR-03 ETL Bulk Load
+1. ETL bulk load is manually triggered (not automatic at startup).
+2. ETL bulk load must ingest both blood bank and donor datasets.
+3. ETL must normalize and write data into Elasticsearch and ClickHouse.
+4. Re-triggering completed bulk load must be idempotent.
+
+FR-04 ETL Incremental Load
+1. ETL incremental sync runs on schedule after bulk completion.
+2. Incremental sync fetches only changed records from source systems.
+3. Incremental sync upserts updates into Elasticsearch and ClickHouse.
+
+FR-05 Blood Bank Search (Anonymous)
+1. Blood-bank search must be usable without donor login.
+2. Backend must support pincode-driven nearest blood bank lookup.
+3. Query behavior must use geo-distance and return nearest 20 records max.
+4. UI must display search results from backend APIs only.
+
+FR-06 Donor Login
+1. Donor tab is visible/usable only for logged-in donors.
+2. Current local OTP behavior is deterministic and hardcoded.
+3. On successful OTP verification, user identity is resolved/created in backend.
+
+FR-07 Donor Search (Authenticated)
+1. Donor search requires authenticated donor context.
+2. Donor matching uses blood group and pincode with geo-aware querying.
+3. UI must not reveal donor personal details during search stage.
+4. UI must display counts by distance buckets:
+   a. Less than 10 km
+   b. Less than 50 km
+   c. Greater than 50 km
+
+FR-08 Request Creation
+1. User can create a blood request from donor search context.
+2. Search context must be persisted.
+3. Initial dispatch targets nearest 20 eligible donors.
+4. Contacted donor entries are persisted for tracking.
+5. Donor personal details remain hidden to requester unless donor has responded.
+
+FR-09 Re-request
+1. User can create a follow-up request from an eligible prior request.
+2. Re-request must show the same distance bucket counts before confirmation.
+3. Re-request dispatch must avoid overlap with previously contacted donors for that request chain.
+
+FR-10 Dispatch Next
+1. User can trigger "next 20" for an active request.
+2. System advances dispatch window and contacts next eligible donors.
+3. Contact counters and timestamps must update.
+
+FR-11 Donor Response Update
+1. A dummy API must exist to mark donor responded=true using patient mobile number input.
+2. Response must be linked to request and user context.
+3. Requester can view list of responded donors with related request ID.
+
+FR-12 Active Request Guard
+1. System must enforce one active request guard per user.
+2. New request creation is blocked when active request exists.
+
+FR-13 Request and Response History
+1. User can view request history.
+2. User can view donor response history.
+3. UI must expose actions such as re-request and dispatch-next based on eligibility.
+
+FR-14 Analytics
+1. Grafana must read Elasticsearch and ClickHouse datasources.
+2. Dashboards must reflect ETL-loaded and ETL-incremented data.
+
+FR-15 Error and Validation Behavior
+1. Invalid inputs must fail fast with typed API errors.
+2. Validation errors must return structured validation payloads.
+3. Unexpected exceptions are centrally handled with safe response payloads.
+
+FR-16 Logging Behavior
+1. Logs should be minimal and controller-focused.
+2. Log important API triggers/results and centralized exceptions.
+3. Avoid service-level request logs except ETL trigger visibility where needed.
+
+
+SECTION B - TECHNICAL CONSTRAINTS AND RESTRICTIONS
+
+TC-01 Storage Responsibility
+1. PostgreSQL is the system of record for users, searches, requests, responses.
+2. Elasticsearch is the operational search store for blood bank and donor queries.
+3. ClickHouse is analytics-only (reporting/Grafana), not operational request search.
+
+TC-02 Data Source Isolation
+1. Backend must not embed source extraction logic for WHO/Redcross.
+2. Frontend must not call WHO/Redcross APIs for application workflows.
+
+TC-03 Geo and Indexing Constraints
+1. Elasticsearch bank/donor indexes must keep location as geo_point.
+2. Nearest blood-bank query must use Elasticsearch native geo sort and max size 20.
+3. ETL must resolve pincode to coordinates and continue safely on missing mappings using fallback defaults.
+
+TC-04 ETL Startup and Mapping
+1. ETL must ensure Elasticsearch templates/mappings exist before indexing begins.
+2. ETL must support bulk-load idempotency and incremental continuation.
+
+TC-05 API Contract Constraints
+1. External/public API payloads must be typed DTO contracts.
+2. No Map-based request/response contracts for public APIs.
+3. Error payloads must remain typed DTO responses.
+
+TC-06 Internal Code Constraints
+1. Method signatures should prefer typed objects over generic maps.
+2. Internal ETL processing may use in-memory maps for merge/index mechanics only.
+3. Redcross and WHO SQL queries must be class-level final constants.
+4. Redcross and WHO DTO boilerplate must use Lombok conventions.
+5. Elasticsearch integration should use class-level query templates plus typed response mapping.
+
+TC-07 Security and Simplicity Constraints (Current Scope)
+1. Do not add JWT or complex auth for this dummy project scope.
+2. Keep login gating simple: donor flows hidden/blocked when not logged in.
+3. Current local OTP stays deterministic/hardcoded.
+
+TC-08 Behavioral Quality Constraints
+1. Input validation must be deterministic and fail-fast.
+2. Runtime behavior must preserve current-path predictability for fresh environment runs.
+
+
+SECTION C - OPERATIONAL VALIDATION CHECKLIST (CURRENT)
+
+1. Start stack: docker compose up -d --build
+2. Verify containers: docker compose ps
+3. Seed data + CSV preview: python db-seeder/seed.py
+4. Verify preview lines (100 records + header)
+5. Trigger bulk ETL: GET http://localhost:8083/admin/etl/bulk-load
+6. Re-trigger bulk ETL and confirm idempotent response
+7. Validate Elasticsearch counts for donor and blood-bank indexes
+8. Validate ClickHouse counts for donor and blood-bank dimensions
+9. Validate backend donor search from CSV-driven test combinations
+10. Validate Grafana login and datasource presence (Elasticsearch + ClickHouse)
+11. Validate OTP behavior: correct 123456 works, wrong OTP returns 401 Invalid OTP

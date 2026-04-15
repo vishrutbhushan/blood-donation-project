@@ -2,6 +2,7 @@ package com.hemo.backend.controller;
 
 import com.hemo.backend.dto.ResponseRecordDTO;
 import com.hemo.backend.dto.ResponseDTO;
+import com.hemo.backend.dto.MarkResponseByPhoneDTO;
 import com.hemo.backend.service.ResponseService;
 
 import jakarta.validation.Valid;
@@ -32,5 +33,12 @@ public class ResponseController {
         List<ResponseRecordDTO> responses = responseService.getResponsesByRequest(requestId);
         log.info("responses fetched requestId={} count={}", requestId, responses.size());
         return responses;
+    }
+
+    @PostMapping("/mark-responded")
+    public ResponseRecordDTO markResponded(@Valid @RequestBody MarkResponseByPhoneDTO dto) {
+        ResponseRecordDTO response = responseService.markRespondedByPhone(dto.getPhoneNumber());
+        log.info("response marked responded phone={} responseId={} requestId={}", dto.getPhoneNumber(), response.getResponseId(), response.getRequestId());
+        return response;
     }
 }

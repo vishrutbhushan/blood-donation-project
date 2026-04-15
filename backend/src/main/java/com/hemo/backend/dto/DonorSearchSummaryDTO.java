@@ -6,7 +6,7 @@ import lombok.Value;
 
 @Value
 @Builder
-public class DonorSearchResponseDTO {
+public class DonorSearchSummaryDTO {
     String recipientBloodGroup;
     List<String> compatibleDonorGroups;
     Long totalMatched;
@@ -15,5 +15,4 @@ public class DonorSearchResponseDTO {
     Long above50KmCount;
     Integer offset;
     Integer limit;
-    List<DonorCandidateDTO> donors;
 }

@@ -117,5 +117,7 @@ CREATE INDEX IF NOT EXISTS idx_requests_blood_group ON requests(blood_group);
 CREATE INDEX IF NOT EXISTS idx_requests_component ON requests(component);
 CREATE INDEX IF NOT EXISTS idx_requests_status_expiry ON requests(status, expires_at);
 CREATE INDEX IF NOT EXISTS idx_responses_request_id ON responses(request_id);
+CREATE INDEX IF NOT EXISTS idx_responses_phone_status ON responses(phone_number, response_status);
+CREATE INDEX IF NOT EXISTS idx_responses_status_responded_at ON responses(response_status, responded_at);
 CREATE INDEX IF NOT EXISTS idx_blood_group_lookup_order ON blood_group_lookup(sort_order, blood_group_code);
 CREATE INDEX IF NOT EXISTS idx_blood_component_lookup_order ON blood_component_lookup(sort_order, blood_component_name);

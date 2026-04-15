@@ -45,9 +45,9 @@ import {
 import {
   setAbhaId,
   setConfirmOpen,
+  setDistanceBuckets,
   setDonorField,
   setDonorSearched,
-  setDonors,
   setMatchedCount,
   setOtpSent,
   setOtpValue,
@@ -107,11 +107,19 @@ export default function App() {
     otpValue,
     otpVerified,
     form: donorForm,
-    donors,
     matchedCount,
+    distanceBuckets,
     confirmOpen,
     searched,
   } = useSelector((state) => state.donor);
+  const [reRequestPreview, setReRequestPreview] = useState({
+    open: false,
+    requestId: null,
+    totalMatched: 0,
+    below10Km: 0,
+    below50Km: 0,
+    above50Km: 0,
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -249,7 +257,11 @@ export default function App() {
   }
 
   async function fetchBanks(group, component, pincode) {
-    const query = new URLSearchParams({ pincode: pincode || '' }).toString();
+    const query = new URLSearchParams({
+      pincode: pincode || '',
+      bloodGroup: group || '',
+      component: component || '',
+    }).toString();
     const rows = await apiRequest(`/api/backend/blood-banks/search?${query}`);
     const list = Array.isArray(rows) ? rows : [];
 
@@ -274,20 +286,11 @@ export default function App() {
     }).toString();
 
     const result = await apiRequest(`/api/backend/donors/search?${query}`);
-    const rows = Array.isArray(result?.donors) ? result.donors : [];
-    const mapped = rows.map((row) => ({
-      name: row.name || '-',
-      abhaId: row.donorId || '-',
-      bloodGroup: row.bloodGroup || '-',
-      pincode: row.pincode || '-',
-      location: row.location || '-',
-      phone: row.phone || '-',
-      source: row.source || '-',
-    }));
-
     return {
-      donors: mapped,
-      totalMatched: Number(result?.totalMatched || mapped.length),
+      totalMatched: Number(result?.totalMatched || 0),
+      below10Km: Number(result?.below10KmCount || 0),
+      below50Km: Number(result?.below50KmCount || 0),
+      above50Km: Number(result?.above50KmCount || 0),
     };
   }
 
@@ -328,8 +331,12 @@ export default function App() {
 
     try {
       const donorResult = await fetchDonors(donorForm.bloodGroup, donorForm.pincode.trim());
-      dispatch(setDonors(donorResult.donors));
       dispatch(setMatchedCount(donorResult.totalMatched));
+      dispatch(setDistanceBuckets({
+        below10Km: donorResult.below10Km,
+        below50Km: donorResult.below50Km,
+        above50Km: donorResult.above50Km,
+      }));
       dispatch(setDonorSearched(true));
       dispatch(setConfirmOpen(true));
       dispatch(setStatusText('Matches loaded'));
@@ -388,7 +395,32 @@ export default function App() {
     dispatch(setLoading(true));
     dispatch(clearStatus());
     try {
-      await apiRequest(`/api/backend/requests/${requestId}/re-request`, { method: 'POST' });
+      const preview = await apiRequest(`/api/backend/requests/${requestId}/re-request-preview`);
+      setReRequestPreview({
+        open: true,
+        requestId,
+        totalMatched: Number(preview?.totalMatched || 0),
+        below10Km: Number(preview?.below10KmCount || 0),
+        below50Km: Number(preview?.below50KmCount || 0),
+        above50Km: Number(preview?.above50KmCount || 0),
+      });
+      dispatch(setStatusText('Re-request preview loaded'));
+    } catch {
+      dispatch(setError('Re-request failed'));
+    } finally {
+      dispatch(setLoading(false));
+    }
+  }
+
+  async function confirmReRequest() {
+    if (!reRequestPreview.requestId) {
+      return;
+    }
+    dispatch(setLoading(true));
+    dispatch(clearStatus());
+    try {
+      await apiRequest(`/api/backend/requests/${reRequestPreview.requestId}/re-request`, { method: 'POST' });
+      setReRequestPreview({ open: false, requestId: null, totalMatched: 0, below10Km: 0, below50Km: 0, above50Km: 0 });
       dispatch(setStatusText('Re-request created'));
       await refreshUserState();
     } catch {
@@ -525,38 +557,26 @@ export default function App() {
 
               {searched && (
                 <Box className="results-wrap">
-                  {donors.length === 0 ? (
-                    <Paper variant="outlined" className="empty-box">No records found</Paper>
-                  ) : (
-                    <TableContainer component={Paper} variant="outlined">
-                      <Table size="small">
-                        <TableHead>
-                          <TableRow>
-                            <TableCell>Name</TableCell>
-                            <TableCell>ABHA</TableCell>
-                            <TableCell>Blood Group</TableCell>
-                            <TableCell>Pincode</TableCell>
-                            <TableCell>Location</TableCell>
-                            <TableCell>Phone</TableCell>
-                            <TableCell>Source</TableCell>
-                          </TableRow>
-                        </TableHead>
-                        <TableBody>
-                          {donors.map((donor, idx) => (
-                            <TableRow key={`${donor.name}-${idx}`}>
-                              <TableCell>{donor.name}</TableCell>
-                              <TableCell>{donor.abhaId}</TableCell>
-                              <TableCell>{donor.bloodGroup}</TableCell>
-                              <TableCell>{donor.pincode}</TableCell>
-                              <TableCell>{donor.location}</TableCell>
-                              <TableCell>{donor.phone}</TableCell>
-                              <TableCell>{donor.source}</TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </TableContainer>
-                  )}
+                  <TableContainer component={Paper} variant="outlined">
+                    <Table size="small">
+                      <TableHead>
+                        <TableRow>
+                          <TableCell>Total Matched</TableCell>
+                          <TableCell>{'< 10 km'}</TableCell>
+                          <TableCell>{'10 to < 50 km'}</TableCell>
+                          <TableCell>{'>= 50 km'}</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        <TableRow>
+                          <TableCell>{matchedCount}</TableCell>
+                          <TableCell>{distanceBuckets.below10Km}</TableCell>
+                          <TableCell>{distanceBuckets.below50Km}</TableCell>
+                          <TableCell>{distanceBuckets.above50Km}</TableCell>
+                        </TableRow>
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
                 </Box>
               )}
             </Paper>
@@ -670,11 +690,30 @@ export default function App() {
       <Dialog open={confirmOpen} onClose={() => dispatch(setConfirmOpen(false))} fullWidth maxWidth="xs">
         <DialogTitle>Confirm Request</DialogTitle>
         <DialogContent>
-          <Typography>{matchedCount} matched. Send to nearest 20?</Typography>
+          <Typography>Total matched: {matchedCount}</Typography>
+          <Typography>{'<10 km'}: {distanceBuckets.below10Km}</Typography>
+          <Typography>{'10 to <50 km'}: {distanceBuckets.below50Km}</Typography>
+          <Typography>{'>=50 km'}: {distanceBuckets.above50Km}</Typography>
+          <Typography sx={{ mt: 1 }}>Send to nearest 20?</Typography>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => dispatch(setConfirmOpen(false))}>Cancel</Button>
           <Button onClick={confirmAndCreateRequest} className="primary-btn" variant="contained">Confirm</Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={reRequestPreview.open} onClose={() => setReRequestPreview({ open: false, requestId: null, totalMatched: 0, below10Km: 0, below50Km: 0, above50Km: 0 })} fullWidth maxWidth="xs">
+        <DialogTitle>Confirm Re-request</DialogTitle>
+        <DialogContent>
+          <Typography>Total matched: {reRequestPreview.totalMatched}</Typography>
+          <Typography>{'<10 km'}: {reRequestPreview.below10Km}</Typography>
+          <Typography>{'10 to <50 km'}: {reRequestPreview.below50Km}</Typography>
+          <Typography>{'>=50 km'}: {reRequestPreview.above50Km}</Typography>
+          <Typography sx={{ mt: 1 }}>Proceed with a new re-request dispatch?</Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setReRequestPreview({ open: false, requestId: null, totalMatched: 0, below10Km: 0, below50Km: 0, above50Km: 0 })}>Cancel</Button>
+          <Button onClick={confirmReRequest} className="primary-btn" variant="contained">Confirm</Button>
         </DialogActions>
       </Dialog>
     </Box>

@@ -1,7 +1,9 @@
 package com.hemo.backend.service;
 
 import com.hemo.backend.dto.DispatchResultDTO;
+import com.hemo.backend.dto.DonorCandidateDTO;
 import com.hemo.backend.dto.DonorSearchResponseDTO;
+import com.hemo.backend.dto.DonorSearchSummaryDTO;
 import com.hemo.backend.dto.RequestDTO;
 import com.hemo.backend.dto.RequestSummaryDTO;
 import com.hemo.backend.dto.ResponseRecordDTO;
@@ -49,7 +51,7 @@ public class RequestService {
         request.setStatus("ACTIVE");
 
         Request saved = requestRepository.save(request);
-        int sent = dispatchFromOffset(saved, 0, initialBatch);
+        int sent = dispatchFromOffset(saved, initialBatch);
         saved.setNumberOfDonorsContacted(sent);
         saved.setLastNotifiedAt(LocalDateTime.now());
         saved = requestRepository.save(saved);
@@ -76,7 +78,7 @@ public class RequestService {
         next.setParentRequest(oldRequest);
 
         Request saved = requestRepository.save(next);
-        int sent = dispatchFromOffset(saved, 0, 20);
+        int sent = dispatchFromOffset(saved, 20);
         saved.setNumberOfDonorsContacted(sent);
         saved.setLastNotifiedAt(LocalDateTime.now());
         saved = requestRepository.save(saved);
@@ -96,7 +98,7 @@ public class RequestService {
 
         int current = request.getNumberOfDonorsContacted() == null ? 0 : request.getNumberOfDonorsContacted();
         int start = current + 1;
-        int sent = dispatchFromOffset(request, current, 20);
+        int sent = dispatchFromOffset(request, 20);
         int end = current + sent;
 
         request.setNumberOfDonorsContacted(end);
@@ -116,10 +118,24 @@ public class RequestService {
 
     @Transactional(readOnly = true)
     public List<ResponseRecordDTO> getUserResponses(@NonNull Long userId) {
-        return responseRepository.findByUserId(userId)
+        return responseRepository.findRespondedByUserId(userId)
                 .stream()
                 .map(this::toResponseRecord)
                 .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public DonorSearchSummaryDTO previewReRequest(@NonNull Long requestId) {
+        Request request = requestRepository.findByIdWithSearchAndUser(requestId)
+                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, "Request not found"));
+        DonorSearchResponseDTO donorBatch = donorSearchService.searchCompatibleDonors(
+            request.getBloodGroup(),
+            request.getSearch().getHospitalPincode(),
+            0,
+            200,
+            responseRepository.findContactedDonorIdsBySearchId(request.getSearch().getSearchId())
+        );
+        return donorSearchService.toSummary(donorBatch);
     }
 
     @Transactional(readOnly = true)
@@ -166,20 +182,34 @@ public class RequestService {
                 .build();
     }
 
-    private int dispatchFromOffset(Request request, int offset, int batchSize) {
+    private int dispatchFromOffset(Request request, int batchSize) {
         if (batchSize <= 0) {
             return 0;
         }
 
+        List<String> excludedDonorIds = responseRepository.findContactedDonorIdsBySearchId(request.getSearch().getSearchId());
         DonorSearchResponseDTO donorBatch = donorSearchService.searchCompatibleDonors(
             request.getBloodGroup(),
             request.getSearch().getHospitalPincode(),
-            offset,
-            batchSize
+            0,
+            200,
+            excludedDonorIds
         );
 
         int sent = 0;
-        for (int i = 0; i < donorBatch.getDonors().size(); i++) {
+        for (DonorCandidateDTO donor : donorBatch.getDonors()) {
+            if (sent >= batchSize) {
+                break;
+            }
+            Response contact = new Response();
+            contact.setRequest(request);
+            contact.setDonorId(donor.getDonorId());
+            contact.setDonorName(donor.getName());
+            contact.setPhoneNumber(donor.getPhone());
+            contact.setBloodGroup(donor.getBloodGroup());
+            contact.setLocation(donor.getLocation());
+            contact.setResponseStatus("NO");
+            responseRepository.save(contact);
             sent++;
         }
 
