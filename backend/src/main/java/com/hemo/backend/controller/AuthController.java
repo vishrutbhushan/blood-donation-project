@@ -12,9 +12,11 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
+import lombok.extern.slf4j.Slf4j;
 
 @RestController
 @RequestMapping("/auth")
+@Slf4j
 public class AuthController {
 
     private static final String HARDCODED_OTP = "123456";
@@ -22,6 +24,7 @@ public class AuthController {
     @PostMapping("/send-otp")
     public OtpSendResponseDTO sendOtp(@Valid @RequestBody OtpSendRequestDTO dto) {
         AuthProfileDTO profile = profileFromAbha(dto.getAbhaId());
+        log.info("auth send-otp requested");
         return new OtpSendResponseDTO(true, dto.getAbhaId(), profile.getName(), profile.getPhone());
     }
 
@@ -32,6 +35,7 @@ public class AuthController {
         }
 
         AuthProfileDTO profile = profileFromAbha(dto.getAbhaId());
+        log.info("auth verify-otp succeeded");
         return new OtpVerifyResponseDTO(true, dto.getAbhaId(), profile.getName(), profile.getPhone());
     }
 

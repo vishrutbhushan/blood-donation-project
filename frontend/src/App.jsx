@@ -77,37 +77,6 @@ async function apiRequest(url, options = {}) {
   return response.json();
 }
 
-function normalizeWhoBank(bank) {
-  return {
-    name: bank.name || '-',
-    category: bank.category || '-',
-    pincode: bank.pincode || '-',
-    contact: bank.phone || '-',
-    address: [bank.street, bank.city, bank.state].filter(Boolean).join(', ') || '-',
-    inventory: Array.isArray(bank.blood_inventory) ? bank.blood_inventory : [],
-    source: 'WHO',
-  };
-}
-
-function normalizeRedcrossCentre(centre) {
-  return {
-    name: centre.name || '-',
-    category: centre.category || '-',
-    pincode: centre.postal_code || '-',
-    contact: centre.contact_number || '-',
-    address: centre.full_address || '-',
-    inventory: Array.isArray(centre.blood_inventory) ? centre.blood_inventory : [],
-    source: 'Redcross',
-  };
-}
-
-function matchesInventory(item, group, component) {
-  const itemGroup = item.blood_group || item.blood_type;
-  const itemComponent = item.component_type || item.component;
-  const units = item.units_available ?? item.quantity ?? 0;
-  return itemGroup === group && itemComponent === component && units > 0;
-}
-
 function tabIndex(screen) {
   if (screen === 'donors') {
     return 1;
@@ -280,18 +249,20 @@ export default function App() {
   }
 
   async function fetchBanks(group, component, pincode) {
-    const [whoBanks, redcrossCentres] = await Promise.all([
-      apiRequest('/api/who/blood-banks').catch(() => []),
-      apiRequest('/api/redcross/centres').catch(() => []),
-    ]);
+    const query = new URLSearchParams({ pincode: pincode || '' }).toString();
+    const rows = await apiRequest(`/api/backend/blood-banks/search?${query}`);
+    const list = Array.isArray(rows) ? rows : [];
 
-    const merged = [...whoBanks.map(normalizeWhoBank), ...redcrossCentres.map(normalizeRedcrossCentre)];
-
-    return merged.filter((row) => {
-      const samePincode = !pincode || String(row.pincode) === String(pincode);
-      const hasMatch = row.inventory.some((inv) => matchesInventory(inv, group, component));
-      return samePincode && hasMatch;
-    });
+    return list.map((row) => ({
+      name: row.bankName || '-',
+      category: row.category || '-',
+      pincode: row.pincode || '-',
+      contact: row.phone || '-',
+      address: row.address || '-',
+      source: row.sourceId || '-',
+      bloodGroup: group || '-',
+      component: component || '-',
+    }));
   }
 
   async function fetchDonors(group, pincode) {

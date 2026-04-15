@@ -43,3 +43,4 @@ RUNBOOK FOR NEXT COPILOT AGENT (validated on 2026-04-15)
 30. Auth OTP behavior for local runs is deterministic: use OTP `123456`; wrong OTP returns HTTP 401 with body `{"error":"Invalid OTP"}`.
 31. CSV-driven UI blood-bank validation uses data from `db-seeder/generated_seed_preview.csv`; one verified combination is pincode `144415`, group `O+`, component `Whole Blood`, which returns Redcross records in the first tab.
 32. CSV-driven donor validation uses donor rows from `db-seeder/generated_seed_preview.csv`; one verified combination is blood group `O+` and pincode `151210`, and backend `GET /donors/search` returns `totalMatched > 0`.
+33. Logging should stay minimal and controller-focused: log only important API triggers/results and exceptions at the controller/advice boundary; avoid service-level request logging unless it is part of ETL trigger visibility.

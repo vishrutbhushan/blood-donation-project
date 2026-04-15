@@ -8,8 +8,6 @@ import java.util.List;
 import java.util.Locale;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
@@ -17,7 +15,6 @@ import org.springframework.web.client.RestClient;
 
 @Service
 public class BloodBankService {
-    private static final Logger LOGGER = LoggerFactory.getLogger(BloodBankService.class);
     private static final String NEAREST_BANKS_QUERY_TEMPLATE = """
             {
               "size": 20,
@@ -63,7 +60,6 @@ public class BloodBankService {
 
             return toDtos(response);
         } catch (Exception e) {
-            LOGGER.warn("blood bank search failed");
             return new ArrayList<>();
         }
     }

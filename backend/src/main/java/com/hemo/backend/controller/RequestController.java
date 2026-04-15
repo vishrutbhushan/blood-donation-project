@@ -8,6 +8,7 @@ import com.hemo.backend.dto.ResponseRecordDTO;
 import com.hemo.backend.service.RequestService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
 
 
@@ -16,6 +17,7 @@ import java.util.List;
 @RestController
 @RequestMapping("/requests")
 @RequiredArgsConstructor
+@Slf4j
 public class RequestController {
 
     private final RequestService requestService;
@@ -23,31 +25,43 @@ public class RequestController {
     @PostMapping("/{searchId}")
     public RequestSummaryDTO createRequest(@PathVariable Long searchId,
                                 @Valid @RequestBody RequestDTO dto) {
-        return requestService.createRequest(searchId, dto);
+        RequestSummaryDTO response = requestService.createRequest(searchId, dto);
+        log.info("request created searchId={} requestId={}", searchId, response.getRequestId());
+        return response;
     }
 
     @PostMapping("/{requestId}/re-request")
     public RequestSummaryDTO reRequest(@PathVariable Long requestId) {
-        return requestService.reRequest(requestId);
+        RequestSummaryDTO response = requestService.reRequest(requestId);
+        log.info("request re-requested requestId={} newRequestId={}", requestId, response.getRequestId());
+        return response;
     }
 
     @PostMapping("/{requestId}/dispatch-next")
     public DispatchResultDTO dispatchNext(@PathVariable Long requestId) {
-        return requestService.dispatchNextTwenty(requestId);
+        DispatchResultDTO response = requestService.dispatchNextTwenty(requestId);
+        log.info("request dispatch-next requestId={} notifiedFrom={} notifiedTo={}", requestId, response.getNotifiedFrom(), response.getNotifiedTo());
+        return response;
     }
 
     @GetMapping("/user/{userId}")
     public List<RequestSummaryDTO> getUserRequests(@PathVariable Long userId) {
-        return requestService.getUserRequestHistory(userId);
+        List<RequestSummaryDTO> requests = requestService.getUserRequestHistory(userId);
+        log.info("request history fetched userId={} count={}", userId, requests.size());
+        return requests;
     }
 
     @GetMapping("/user/{userId}/responses")
     public List<ResponseRecordDTO> getUserResponses(@PathVariable Long userId) {
-        return requestService.getUserResponses(userId);
+        List<ResponseRecordDTO> responses = requestService.getUserResponses(userId);
+        log.info("request responses fetched userId={} count={}", userId, responses.size());
+        return responses;
     }
 
     @GetMapping("/user/{userId}/active")
     public ActiveRequestStatusDTO hasActive(@PathVariable Long userId) {
-        return new ActiveRequestStatusDTO(requestService.hasActiveRequest(userId));
+        boolean active = requestService.hasActiveRequest(userId);
+        log.info("request active-status userId={} active={}", userId, active);
+        return new ActiveRequestStatusDTO(active);
     }
 }

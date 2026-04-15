@@ -15,8 +15,7 @@ import com.hemo.backend.repository.SearchRepository;
 import java.time.LocalDateTime;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.NonNull;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,15 +23,13 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 public class RequestService {
-    private static final Logger LOGGER = LoggerFactory.getLogger(RequestService.class);
-
     private final RequestRepository requestRepository;
     private final SearchRepository searchRepository;
     private final ResponseRepository responseRepository;
     private final DonorSearchService donorSearchService;
 
     @Transactional
-    public RequestSummaryDTO createRequest(Long searchId, RequestDTO dto) {
+    public RequestSummaryDTO createRequest(@NonNull Long searchId, RequestDTO dto) {
         Search search = searchRepository.findById(searchId)
                 .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, "Search not found"));
 
@@ -52,7 +49,7 @@ public class RequestService {
         request.setStatus("ACTIVE");
 
         Request saved = requestRepository.save(request);
-        int sent = dispatchFromOffset(saved, 0, initialBatch, "create-request");
+        int sent = dispatchFromOffset(saved, 0, initialBatch);
         saved.setNumberOfDonorsContacted(sent);
         saved.setLastNotifiedAt(LocalDateTime.now());
         saved = requestRepository.save(saved);
@@ -60,7 +57,7 @@ public class RequestService {
     }
 
     @Transactional
-    public RequestSummaryDTO reRequest(Long requestId) {
+    public RequestSummaryDTO reRequest(@NonNull Long requestId) {
         Request oldRequest = requestRepository.findByIdWithSearchAndUser(requestId)
                 .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, "Request not found"));
 
@@ -79,7 +76,7 @@ public class RequestService {
         next.setParentRequest(oldRequest);
 
         Request saved = requestRepository.save(next);
-        int sent = dispatchFromOffset(saved, 0, 20, "re-request");
+        int sent = dispatchFromOffset(saved, 0, 20);
         saved.setNumberOfDonorsContacted(sent);
         saved.setLastNotifiedAt(LocalDateTime.now());
         saved = requestRepository.save(saved);
@@ -87,7 +84,7 @@ public class RequestService {
     }
 
     @Transactional
-    public DispatchResultDTO dispatchNextTwenty(Long requestId) {
+    public DispatchResultDTO dispatchNextTwenty(@NonNull Long requestId) {
         Request request = requestRepository.findByIdWithSearchAndUser(requestId)
                 .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, "Request not found"));
 
@@ -99,7 +96,7 @@ public class RequestService {
 
         int current = request.getNumberOfDonorsContacted() == null ? 0 : request.getNumberOfDonorsContacted();
         int start = current + 1;
-        int sent = dispatchFromOffset(request, current, 20, "next-20");
+        int sent = dispatchFromOffset(request, current, 20);
         int end = current + sent;
 
         request.setNumberOfDonorsContacted(end);
@@ -110,7 +107,7 @@ public class RequestService {
     }
 
     @Transactional(readOnly = true)
-    public List<RequestSummaryDTO> getUserRequestHistory(Long userId) {
+    public List<RequestSummaryDTO> getUserRequestHistory(@NonNull Long userId) {
         return requestRepository.findByUserId(userId)
                 .stream()
                 .map(req -> toRequestSummary(req, canReRequest(req)))
@@ -118,7 +115,7 @@ public class RequestService {
     }
 
     @Transactional(readOnly = true)
-    public List<ResponseRecordDTO> getUserResponses(Long userId) {
+    public List<ResponseRecordDTO> getUserResponses(@NonNull Long userId) {
         return responseRepository.findByUserId(userId)
                 .stream()
                 .map(this::toResponseRecord)
@@ -126,7 +123,7 @@ public class RequestService {
     }
 
     @Transactional(readOnly = true)
-    public boolean hasActiveRequest(Long userId) {
+    public boolean hasActiveRequest(@NonNull Long userId) {
         return requestRepository.countActiveByUser(userId) > 0;
     }
 
@@ -169,9 +166,8 @@ public class RequestService {
                 .build();
     }
 
-    private int dispatchFromOffset(Request request, int offset, int batchSize, String mode) {
+    private int dispatchFromOffset(Request request, int offset, int batchSize) {
         if (batchSize <= 0) {
-            emitSmsSummary(request.getRequestId(), mode, 0);
             return 0;
         }
 
@@ -187,15 +183,6 @@ public class RequestService {
             sent++;
         }
 
-        emitSmsSummary(request.getRequestId(), mode, sent);
         return sent;
-    }
-
-    private void emitSmsSummary(Long requestId, String mode, int sent) {
-        LOGGER.info("sms_summary request={} mode={} sent={}",
-            requestId,
-            mode,
-            sent
-        );
     }
 }

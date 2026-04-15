@@ -86,12 +86,41 @@ The Spring Boot services resolve database and search settings from environment v
 
 For local host access, the application and PostgreSQL services are published on ports such as `8080`, `8081`, `8082`, `3000`, `3001`, `5432`, `5433`, `5434`, and `5435`. Elasticsearch and ClickHouse are internal-only.
 
+## Runbook
+
+Use this order when you want to exercise the full flow end to end:
+
+1. Start the stack with `docker compose up -d --build`.
+2. Generate dummy source data and refresh the CSV preview with `python db-seeder/seed.py`.
+3. Trigger the ETL bulk load manually with `GET http://localhost:8083/admin/etl/bulk-load`.
+4. Open the frontend at `http://localhost:3001`.
+5. Use the blood-bank tab for anonymous search.
+6. Use the donor tab for the authenticated donor flow.
+7. Open Grafana at `http://localhost:3000`.
+
+Trigger endpoints used by the UI and services:
+
+- `GET /api/backend/reference-data` - blood group and component options for the UI.
+- `POST /api/backend/auth/send-otp` - start donor login.
+- `POST /api/backend/auth/verify-otp` - verify donor login.
+- `POST /api/backend/users/get-or-create` - create or resolve the donor user.
+- `GET /api/backend/blood-banks/search?pincode={pincode}` - blood bank list served by backend from Elasticsearch data.
+- `GET /api/backend/donors/search` - donor search backed by Elasticsearch.
+- `POST /api/backend/searches/{userId}` - create a search record.
+- `POST /api/backend/requests/{searchId}` - create a request from a search.
+- `POST /api/backend/requests/{requestId}/re-request` - create a follow-up request.
+- `POST /api/backend/requests/{requestId}/dispatch-next` - notify the next 20 donors.
+- `GET /api/backend/requests/user/{userId}` - fetch a user’s requests.
+- `GET /api/backend/requests/user/{userId}/responses` - fetch donor responses.
+- `GET /api/backend/requests/user/{userId}/active` - check for an active request.
+
 ## Proxies
 
 The frontend container uses Nginx as a lightweight reverse proxy for the API routes.
 
 - The frontend is published on port `3001` and serves the compiled UI from `frontend/`.
-- Nginx forwards `/api/backend`, `/api/who`, and `/api/redcross` to the respective services by Docker DNS name.
+- Nginx forwards `/api/backend` to the backend service by Docker DNS name.
+- WHO and Redcross endpoints are used by ETL as simulated external source systems, not by frontend or backend request flows.
 - Containers still talk to each other directly by service name inside the Compose network.
 - The ETL service should use Docker service DNS names when it runs in the stack network.
 

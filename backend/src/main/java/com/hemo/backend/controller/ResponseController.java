@@ -6,6 +6,7 @@ import com.hemo.backend.service.ResponseService;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -13,6 +14,7 @@ import java.util.List;
 @RestController
 @RequestMapping("/responses")
 @RequiredArgsConstructor
+@Slf4j
 public class ResponseController {
 
     private final ResponseService responseService;
@@ -20,11 +22,15 @@ public class ResponseController {
     @PostMapping("/{requestId}")
     public ResponseRecordDTO addResponse(@PathVariable Long requestId,
                                @Valid @RequestBody ResponseDTO dto) {
-        return responseService.addResponse(requestId, dto);
+        ResponseRecordDTO response = responseService.addResponse(requestId, dto);
+        log.info("response created requestId={} responseId={}", requestId, response.getResponseId());
+        return response;
     }
 
     @GetMapping("/{requestId}")
     public List<ResponseRecordDTO> getResponses(@PathVariable Long requestId) {
-        return responseService.getResponsesByRequest(requestId);
+        List<ResponseRecordDTO> responses = responseService.getResponsesByRequest(requestId);
+        log.info("responses fetched requestId={} count={}", requestId, responses.size());
+        return responses;
     }
 }
