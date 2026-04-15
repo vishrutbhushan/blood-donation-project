@@ -105,8 +105,6 @@ public class WhoRepository {
         this.jdbc = jdbc;
     }
 
-    // ─── api_contracts: GET /api/who/blood-banks (all + incremental) ──────────
-
     public List<WhoBloodBankDTO> fetchAllBloodBanks() {
         return fetchBloodBanksWithInventory(null);
     }
@@ -145,8 +143,6 @@ public class WhoRepository {
         return new ArrayList<>(bankMap.values());
     }
 
-    // ─── api_contracts: GET /api/who/donors (all + incremental) ──────────────
-
     public List<WhoDonorDTO> fetchAllDonors() {
         return fetchDonors(null);
     }
@@ -178,14 +174,6 @@ public class WhoRepository {
         return jdbc.query(SQL_DONORS_SINCE, ps -> ps.setLong(1, since),
                 BeanPropertyRowMapper.newInstance(WhoDonorDTO.class));
     }
-
-    // ─── ETL: GET /incremental?since=X&until=Y ────────────────────────────────
-    // Returns {"blood_banks": [...], "donors": [...]} with ETL-compatible field names.
-    // Field mapping:
-    //   bank:  bank_id, bank_name, address(street), city, state, pincode, phone, update_time
-    //   donor: donor_id, name, blood_group, phone, email(null), address_current(null),
-    //          city_current, state_current, pincode_current, bank_id,
-    //          last_donated_on, last_donated_blood_bank(null), update_time
 
     public List<WhoEtlBankDTO> fetchEtlBanks(long since, long until) {
         return jdbc.query(SQL_ETL_BANKS_RANGE,

@@ -1,14 +1,12 @@
 package com.hemo.backend.service;
 
 import com.hemo.backend.dto.DispatchResultDTO;
-import com.hemo.backend.dto.DonorCandidateDTO;
 import com.hemo.backend.dto.DonorSearchResponseDTO;
 import com.hemo.backend.dto.DonorSearchSummaryDTO;
 import com.hemo.backend.dto.RequestDTO;
 import com.hemo.backend.dto.RequestSummaryDTO;
 import com.hemo.backend.dto.ResponseRecordDTO;
 import com.hemo.backend.entity.Request;
-import com.hemo.backend.entity.Search;
 import com.hemo.backend.entity.Response;
 import com.hemo.backend.exception.GlobalExceptionHandler.AppException;
 import com.hemo.backend.repository.RequestRepository;
@@ -29,10 +27,11 @@ public class RequestService {
     private final SearchRepository searchRepository;
     private final ResponseRepository responseRepository;
     private final DonorSearchService donorSearchService;
+    private final RequestDispatchService requestDispatchService;
 
     @Transactional
     public RequestSummaryDTO createRequest(@NonNull Long searchId, RequestDTO dto) {
-        Search search = searchRepository.findById(searchId)
+        var search = searchRepository.findById(searchId)
                 .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, "Search not found"));
 
         Long userId = search.getUser().getUserId();
@@ -42,16 +41,11 @@ public class RequestService {
 
         int initialBatch = Math.min(20, Math.max(dto.getMatchedCount(), 0));
 
-        Request request = new Request();
-        request.setSearch(search);
-        request.setBloodGroup(dto.getBloodGroup());
-        request.setComponent(dto.getComponent());
-        request.setUnitsRequested(dto.getUnitsRequested());
+        Request request = buildRequest(search, dto.getBloodGroup(), dto.getComponent(), dto.getUnitsRequested(), null);
         request.setNumberOfDonorsContacted(initialBatch);
-        request.setStatus("ACTIVE");
 
         Request saved = requestRepository.save(request);
-        int sent = dispatchFromOffset(saved, initialBatch);
+        int sent = requestDispatchService.dispatchBatchForRequest(saved, initialBatch);
         saved.setNumberOfDonorsContacted(sent);
         saved.setLastNotifiedAt(LocalDateTime.now());
         saved = requestRepository.save(saved);
@@ -68,17 +62,17 @@ public class RequestService {
             throw new AppException(HttpStatus.CONFLICT, "Responses already received");
         }
 
-        Request next = new Request();
-        next.setSearch(oldRequest.getSearch());
-        next.setBloodGroup(oldRequest.getBloodGroup());
-        next.setComponent(oldRequest.getComponent());
-        next.setUnitsRequested(oldRequest.getUnitsRequested());
+        Request next = buildRequest(
+            oldRequest.getSearch(),
+            oldRequest.getBloodGroup(),
+            oldRequest.getComponent(),
+            oldRequest.getUnitsRequested(),
+            oldRequest
+        );
         next.setNumberOfDonorsContacted(20);
-        next.setStatus("ACTIVE");
-        next.setParentRequest(oldRequest);
 
         Request saved = requestRepository.save(next);
-        int sent = dispatchFromOffset(saved, 20);
+        int sent = requestDispatchService.dispatchBatchForRequest(saved, 20);
         saved.setNumberOfDonorsContacted(sent);
         saved.setLastNotifiedAt(LocalDateTime.now());
         saved = requestRepository.save(saved);
@@ -98,7 +92,7 @@ public class RequestService {
 
         int current = request.getNumberOfDonorsContacted() == null ? 0 : request.getNumberOfDonorsContacted();
         int start = current + 1;
-        int sent = dispatchFromOffset(request, 20);
+        int sent = requestDispatchService.dispatchBatchForRequest(request, 20);
         int end = current + sent;
 
         request.setNumberOfDonorsContacted(end);
@@ -167,6 +161,22 @@ public class RequestService {
                 .build();
     }
 
+    private Request buildRequest(
+            com.hemo.backend.entity.Search search,
+            String bloodGroup,
+            String component,
+            Integer unitsRequested,
+            Request parentRequest) {
+        Request request = new Request();
+        request.setSearch(search);
+        request.setBloodGroup(bloodGroup);
+        request.setComponent(component);
+        request.setUnitsRequested(unitsRequested);
+        request.setStatus("ACTIVE");
+        request.setParentRequest(parentRequest);
+        return request;
+    }
+
     private ResponseRecordDTO toResponseRecord(Response response) {
         return ResponseRecordDTO.builder()
                 .responseId(response.getResponseId())
@@ -180,39 +190,5 @@ public class RequestService {
                 .responseStatus(response.getResponseStatus())
                 .respondedAt(response.getRespondedAt())
                 .build();
-    }
-
-    private int dispatchFromOffset(Request request, int batchSize) {
-        if (batchSize <= 0) {
-            return 0;
-        }
-
-        List<String> excludedDonorIds = responseRepository.findContactedDonorIdsBySearchId(request.getSearch().getSearchId());
-        DonorSearchResponseDTO donorBatch = donorSearchService.searchCompatibleDonors(
-            request.getBloodGroup(),
-            request.getSearch().getHospitalPincode(),
-            0,
-            200,
-            excludedDonorIds
-        );
-
-        int sent = 0;
-        for (DonorCandidateDTO donor : donorBatch.getDonors()) {
-            if (sent >= batchSize) {
-                break;
-            }
-            Response contact = new Response();
-            contact.setRequest(request);
-            contact.setDonorId(donor.getDonorId());
-            contact.setDonorName(donor.getName());
-            contact.setPhoneNumber(donor.getPhone());
-            contact.setBloodGroup(donor.getBloodGroup());
-            contact.setLocation(donor.getLocation());
-            contact.setResponseStatus("NO");
-            responseRepository.save(contact);
-            sent++;
-        }
-
-        return sent;
     }
 }

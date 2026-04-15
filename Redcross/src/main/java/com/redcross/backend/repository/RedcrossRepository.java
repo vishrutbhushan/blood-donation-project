@@ -108,8 +108,6 @@ public class RedcrossRepository {
         this.jdbc = jdbc;
     }
 
-    // ─── api_contracts: GET /api/redcross/centres (all + incremental) ─────────
-
     public List<RedcrossCentreDTO> fetchAllCentres() {
         return fetchCentresWithInventory(null);
     }
@@ -148,8 +146,6 @@ public class RedcrossRepository {
         return new ArrayList<>(bankMap.values());
     }
 
-    // ─── api_contracts: GET /api/redcross/people (all + incremental) ──────────
-
     public List<RedcrossDonorDTO> fetchAllPeople() {
         return fetchPeople(null);
     }
@@ -181,14 +177,6 @@ public class RedcrossRepository {
         return jdbc.query(SQL_PEOPLE_SINCE, ps -> ps.setLong(1, since),
                 BeanPropertyRowMapper.newInstance(RedcrossDonorDTO.class));
     }
-
-    // ─── ETL: GET /incremental?since=X&until=Y ────────────────────────────────
-    // Returns {"centres": [...], "people": [...]} with ETL-compatible field names.
-    // Field mapping:
-    //   bank:  bank_id, bank_name, address, city(null), state(null), pincode, phone, update_time
-    //   donor: donor_id, name, blood_group, phone, email(null), address_current,
-    //          city_current(null), state_current(null), pincode_current (from bank), bank_id,
-    //          last_donated_on, last_donated_blood_bank(null), update_time
 
     public List<RedcrossEtlBankDTO> fetchEtlBanks(long since, long until) {
         return jdbc.query(SQL_ETL_BANKS_RANGE,

@@ -15,37 +15,37 @@ import org.springframework.web.client.RestClient;
 
 @Service
 public class BloodBankService {
-    private static final String NEAREST_BANKS_QUERY_TEMPLATE = """
-            {
-              "size": 20,
-              "track_total_hits": false,
-              "query": {
-                "bool": {
-                  "filter": [
-                                        { "exists": { "field": "location" } }
-                                        %s
-                  ],
-                  "must_not": [
-                    { "geo_distance": { "distance": "1m", "location": { "lat": 0, "lon": 0 } } }
-                  ]
-                }
-              },
-              "sort": [
-                {
-                  "_geo_distance": {
-                    "location": { "lat": %.8f, "lon": %.8f },
-                    "order": "asc",
-                    "unit": "km",
-                    "distance_type": "arc"
-                  }
-                }
-              ]
-            }
-            """;
+        private static final String NEAREST_BANKS_QUERY_TEMPLATE = """
+                        {
+                            "size": 20,
+                            "track_total_hits": false,
+                            "query": {
+                                "bool": {
+                                    "filter": [
+                                                                                { "exists": { "field": "location" } }
+                                                                                %s
+                                    ],
+                                    "must_not": [
+                                        { "geo_distance": { "distance": "1m", "location": { "lat": 0, "lon": 0 } } }
+                                    ]
+                                }
+                            },
+                            "sort": [
+                                {
+                                    "_geo_distance": {
+                                        "location": { "lat": %.8f, "lon": %.8f },
+                                        "order": "asc",
+                                        "unit": "km",
+                                        "distance_type": "arc"
+                                    }
+                                }
+                            ]
+                        }
+                        """;
 
     private final RestClient elasticsearchClient;
 
-    public BloodBankService(@Qualifier("elasticsearchRestClient") RestClient elasticsearchClient) {
+        public BloodBankService(@Qualifier("elasticsearchRestClient") RestClient elasticsearchClient) {
         this.elasticsearchClient = elasticsearchClient;
     }
 
@@ -112,16 +112,16 @@ public class BloodBankService {
         StringBuilder filters = new StringBuilder();
         if (bloodGroup != null && !bloodGroup.isBlank()) {
             filters.append(",\n                    { \"term\": { \"blood_group\": \"")
-                .append(escape(bloodGroup.trim()))
-                .append("\" } }");
+                    .append(escape(bloodGroup.trim()))
+                    .append("\" } }");
         }
         if (component != null && !component.isBlank()) {
             String escapedComponent = escape(component.trim());
             filters.append(",\n                    { \"bool\": { \"should\": [")
-                .append("{ \"term\": { \"component\": \"").append(escapedComponent).append("\" } },")
-                .append("{ \"term\": { \"component_type\": \"").append(escapedComponent).append("\" } },")
-                .append("{ \"term\": { \"blood_component\": \"").append(escapedComponent).append("\" } }")
-                .append("], \"minimum_should_match\": 1 } }");
+                    .append("{ \"term\": { \"component\": \"").append(escapedComponent).append("\" } },")
+                    .append("{ \"term\": { \"component_type\": \"").append(escapedComponent).append("\" } },")
+                    .append("{ \"term\": { \"blood_component\": \"").append(escapedComponent).append("\" } }")
+                    .append("], \"minimum_should_match\": 1 } }");
         }
         return filters.toString();
     }

@@ -20,8 +20,6 @@ public class RedcrossController {
         this.repo = repo;
     }
 
-    // ─── api_contracts.txt endpoints ──────────────────────────────────────────
-
     @GetMapping("/api/redcross/centres")
     public List<RedcrossCentreDTO> getCentres() {
         List<RedcrossCentreDTO> centres = repo.fetchAllCentres();
@@ -52,10 +50,6 @@ public class RedcrossController {
         log.info("redcross people incremental since={} count={}", since, donors.size());
         return donors;
     }
-
-    // ─── ETL combined endpoint ─────────────────────────────────────────────────
-    // ETL calls: GET /incremental?since={epoch_ms}&until={epoch_ms}
-    // Returns:   { "centres": [...banks...], "people": [...donors...] }
 
     @GetMapping("/incremental")
     public RedcrossIncrementalResponseDTO etlIncremental(

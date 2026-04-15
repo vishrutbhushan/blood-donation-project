@@ -19,53 +19,53 @@ import org.springframework.web.client.RestClient;
 
 @Service
 public class DonorSearchService {
-        private static final String QUERY_WITH_GEO_TEMPLATE = """
-                {
-                    "from": %d,
-                    "size": %d,
-                    "track_total_hits": true,
-                    "query": {
-                        "bool": {
-                            "filter": [
-                                { "terms": { "blood_group": [%s] } },
-                                { "term": { "availability_status": true } },
-                                { "exists": { "field": "location" } }
-                            ]
+    private static final String QUERY_WITH_GEO_TEMPLATE = """
+            {
+                "from": %d,
+                "size": %d,
+                "track_total_hits": true,
+                "query": {
+                    "bool": {
+                        "filter": [
+                            { "terms": { "blood_group": [%s] } },
+                            { "term": { "availability_status": true } },
+                            { "exists": { "field": "location" } }
+                        ]
+                    }
+                },
+                "sort": [
+                    {
+                        "_geo_distance": {
+                            "location": { "lat": %.8f, "lon": %.8f },
+                            "order": "asc",
+                            "unit": "km",
+                            "distance_type": "arc"
                         }
                     },
-                    "sort": [
-                        {
-                            "_geo_distance": {
-                                "location": { "lat": %.8f, "lon": %.8f },
-                                "order": "asc",
-                                "unit": "km",
-                                "distance_type": "arc"
-                            }
-                        },
-                        { "event_time": { "order": "desc" } }
-                    ]
-                }
-                """;
+                    { "event_time": { "order": "desc" } }
+                ]
+            }
+            """;
 
-        private static final String QUERY_NO_GEO_TEMPLATE = """
-                {
-                    "from": %d,
-                    "size": %d,
-                    "track_total_hits": true,
-                    "query": {
-                        "bool": {
-                            "filter": [
-                                { "terms": { "blood_group": [%s] } },
-                                { "term": { "availability_status": true } },
-                                { "exists": { "field": "location" } }
-                            ]
-                        }
-                    },
-                    "sort": [
-                        { "event_time": { "order": "desc" } }
-                    ]
-                }
-                """;
+    private static final String QUERY_NO_GEO_TEMPLATE = """
+            {
+                "from": %d,
+                "size": %d,
+                "track_total_hits": true,
+                "query": {
+                    "bool": {
+                        "filter": [
+                            { "terms": { "blood_group": [%s] } },
+                            { "term": { "availability_status": true } },
+                            { "exists": { "field": "location" } }
+                        ]
+                    }
+                },
+                "sort": [
+                    { "event_time": { "order": "desc" } }
+                ]
+            }
+            """;
 
     private final ObjectMapper objectMapper;
     private final BloodCompatibilityService bloodCompatibilityService;
@@ -183,17 +183,17 @@ public class DonorSearchService {
 
     private String buildQuery(List<String> compatibleGroups, PincodeGeoService.GeoPoint geoPoint, int offset, int limit) {
         String terms = compatibleGroups.stream()
-            .map(v -> "\"" + escape(v) + "\"")
-            .collect(Collectors.joining(","));
+                .map(v -> "\"" + escape(v) + "\"")
+                .collect(Collectors.joining(","));
         if (geoPoint != null) {
             return String.format(
-                Locale.US,
-                QUERY_WITH_GEO_TEMPLATE,
-                offset,
-                limit,
-                terms,
-                geoPoint.lat(),
-                geoPoint.lon()
+                    Locale.US,
+                    QUERY_WITH_GEO_TEMPLATE,
+                    offset,
+                    limit,
+                    terms,
+                    geoPoint.lat(),
+                    geoPoint.lon()
             );
         }
         return String.format(Locale.US, QUERY_NO_GEO_TEMPLATE, offset, limit, terms);

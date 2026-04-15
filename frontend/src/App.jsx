@@ -7,10 +7,6 @@ import {
   Box,
   Button,
   Container,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
   FormControl,
   InputLabel,
   MenuItem,
@@ -31,6 +27,9 @@ import {
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import WaterDropOutlinedIcon from '@mui/icons-material/WaterDropOutlined';
 import { useDispatch, useSelector } from 'react-redux';
+import ConfirmRequestDialog from './components/ConfirmRequestDialog';
+import DonorLoginDialog from './components/DonorLoginDialog';
+import ReRequestConfirmDialog from './components/ReRequestConfirmDialog';
 import { clearStatus, setDonorLoginOpen, setError, setLoading, setScreen, setStatusText } from './store/uiSlice';
 import {
   setActiveRequest,
@@ -120,6 +119,10 @@ export default function App() {
     below50Km: 0,
     above50Km: 0,
   });
+
+  function closeReRequestPreview() {
+    setReRequestPreview({ open: false, requestId: null, totalMatched: 0, below10Km: 0, below50Km: 0, above50Km: 0 });
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -420,7 +423,7 @@ export default function App() {
     dispatch(clearStatus());
     try {
       await apiRequest(`/api/backend/requests/${reRequestPreview.requestId}/re-request`, { method: 'POST' });
-      setReRequestPreview({ open: false, requestId: null, totalMatched: 0, below10Km: 0, below50Km: 0, above50Km: 0 });
+      closeReRequestPreview();
       dispatch(setStatusText('Re-request created'));
       await refreshUserState();
     } catch {
@@ -670,52 +673,38 @@ export default function App() {
         </Container>
       </Box>
 
-      <Dialog open={donorLoginOpen} onClose={closeDonorLogin} fullWidth maxWidth="xs">
-        <DialogTitle>Donor Login</DialogTitle>
-        <DialogContent>
-          <Box className="login-grid">
-            <TextField label="ABHA ID (14 digits)" value={abhaId} onChange={(e) => { dispatch(setAbhaId(e.target.value)); dispatch(setOtpSent(false)); dispatch(setOtpVerified(false)); dispatch(setOtpValue('')); }} fullWidth margin="dense" />
-            <TextField label="OTP" value={otpValue} onChange={(e) => dispatch(setOtpValue(e.target.value))} fullWidth margin="dense" />
-            <Box className="action-row">
-              <Button variant="outlined" onClick={sendDonorOtp} disabled={loading || !/^\d{14}$/.test(abhaId.trim())}>Send OTP</Button>
-              <Button variant="contained" className="primary-btn" onClick={verifyDonorOtp} disabled={loading || !otpSent}>Verify</Button>
-            </Box>
-          </Box>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={closeDonorLogin}>Cancel</Button>
-        </DialogActions>
-      </Dialog>
+      <DonorLoginDialog
+        open={donorLoginOpen}
+        loading={loading}
+        abhaId={abhaId}
+        otpValue={otpValue}
+        canVerify={otpSent}
+        onAbhaChange={(value) => {
+          dispatch(setAbhaId(value));
+          dispatch(setOtpSent(false));
+          dispatch(setOtpVerified(false));
+          dispatch(setOtpValue(''));
+        }}
+        onOtpChange={(value) => dispatch(setOtpValue(value))}
+        onSendOtp={sendDonorOtp}
+        onVerify={verifyDonorOtp}
+        onClose={closeDonorLogin}
+      />
 
-      <Dialog open={confirmOpen} onClose={() => dispatch(setConfirmOpen(false))} fullWidth maxWidth="xs">
-        <DialogTitle>Confirm Request</DialogTitle>
-        <DialogContent>
-          <Typography>Total matched: {matchedCount}</Typography>
-          <Typography>{'<10 km'}: {distanceBuckets.below10Km}</Typography>
-          <Typography>{'10 to <50 km'}: {distanceBuckets.below50Km}</Typography>
-          <Typography>{'>=50 km'}: {distanceBuckets.above50Km}</Typography>
-          <Typography sx={{ mt: 1 }}>Send to nearest 20?</Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => dispatch(setConfirmOpen(false))}>Cancel</Button>
-          <Button onClick={confirmAndCreateRequest} className="primary-btn" variant="contained">Confirm</Button>
-        </DialogActions>
-      </Dialog>
+      <ConfirmRequestDialog
+        open={confirmOpen}
+        matchedCount={matchedCount}
+        buckets={distanceBuckets}
+        onCancel={() => dispatch(setConfirmOpen(false))}
+        onConfirm={confirmAndCreateRequest}
+      />
 
-      <Dialog open={reRequestPreview.open} onClose={() => setReRequestPreview({ open: false, requestId: null, totalMatched: 0, below10Km: 0, below50Km: 0, above50Km: 0 })} fullWidth maxWidth="xs">
-        <DialogTitle>Confirm Re-request</DialogTitle>
-        <DialogContent>
-          <Typography>Total matched: {reRequestPreview.totalMatched}</Typography>
-          <Typography>{'<10 km'}: {reRequestPreview.below10Km}</Typography>
-          <Typography>{'10 to <50 km'}: {reRequestPreview.below50Km}</Typography>
-          <Typography>{'>=50 km'}: {reRequestPreview.above50Km}</Typography>
-          <Typography sx={{ mt: 1 }}>Proceed with a new re-request dispatch?</Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setReRequestPreview({ open: false, requestId: null, totalMatched: 0, below10Km: 0, below50Km: 0, above50Km: 0 })}>Cancel</Button>
-          <Button onClick={confirmReRequest} className="primary-btn" variant="contained">Confirm</Button>
-        </DialogActions>
-      </Dialog>
+      <ReRequestConfirmDialog
+        open={reRequestPreview.open}
+        preview={reRequestPreview}
+        onCancel={closeReRequestPreview}
+        onConfirm={confirmReRequest}
+      />
     </Box>
   );
 }

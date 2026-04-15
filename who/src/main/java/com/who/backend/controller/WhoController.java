@@ -20,8 +20,6 @@ public class WhoController {
         this.repo = repo;
     }
 
-    // ─── api_contracts.txt endpoints ──────────────────────────────────────────
-
     @GetMapping("/api/who/blood-banks")
     public List<WhoBloodBankDTO> getBloodBanks() {
         List<WhoBloodBankDTO> banks = repo.fetchAllBloodBanks();
@@ -52,10 +50,6 @@ public class WhoController {
         log.info("who donors incremental since={} count={}", since, donors.size());
         return donors;
     }
-
-    // ─── ETL combined endpoint ─────────────────────────────────────────────────
-    // ETL calls: GET /incremental?since={epoch_ms}&until={epoch_ms}
-    // Returns:   { "blood_banks": [...banks...], "donors": [...donors...] }
 
     @GetMapping("/incremental")
     public WhoIncrementalResponseDTO etlIncremental(
