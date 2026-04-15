@@ -1,9 +1,6 @@
 import React from 'react';
 
-const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
-const COMPONENTS = ['Whole Blood', 'Packed RBC', 'Fresh Frozen Plasma', 'Platelet Concentrate', 'Plasma'];
-
-export default function SearchForm({ form, onChange, onSearch, loading }) {
+export default function SearchForm({ form, bloodGroups = [], bloodComponents = [], onChange, onSearch, loading }) {
   return (
     <section className="card-section">
       <div className="section-header">
@@ -23,7 +20,8 @@ export default function SearchForm({ form, onChange, onSearch, loading }) {
         <label>
           Blood Group
           <select value={form.bloodGroup} onChange={(event) => onChange('bloodGroup', event.target.value)}>
-            {BLOOD_GROUPS.map((group) => (
+            <option value="" disabled>Select blood group</option>
+            {bloodGroups.map((group) => (
               <option key={group} value={group}>
                 {group}
               </option>
@@ -33,7 +31,8 @@ export default function SearchForm({ form, onChange, onSearch, loading }) {
         <label>
           Blood Component
           <select value={form.bloodComponent} onChange={(event) => onChange('bloodComponent', event.target.value)}>
-            {COMPONENTS.map((component) => (
+            <option value="" disabled>Select component</option>
+            {bloodComponents.map((component) => (
               <option key={component} value={component}>
                 {component}
               </option>

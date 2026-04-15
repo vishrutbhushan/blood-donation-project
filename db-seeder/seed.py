@@ -16,6 +16,7 @@ UUID-based identifier so re-runs never produce duplicates.
 Run once → ~1 M records. Run 10× → ~10 M records.
 """
 
+import csv
 import hashlib
 import json
 import random
@@ -33,6 +34,31 @@ from psycopg2.extras import execute_values
 BANKS_PER_RUN  = 20           # new blood banks to insert each invocation
 DONORS_PER_RUN = 100          # new donors to insert each invocation
 BATCH_SIZE     = 10_000       # rows per executemany batch (keeps memory bounded)
+CSV_PREVIEW_ROWS = 100        # overwrite a 100-row preview CSV on each run
+CSV_PREVIEW_PATH = Path(__file__).resolve().with_name("generated_seed_preview.csv")
+
+CSV_PREVIEW_HEADERS = [
+    "source",
+    "entity_type",
+    "bank_id",
+    "record_id",
+    "name",
+    "blood_group",
+    "component",
+    "category",
+    "contact",
+    "email",
+    "address",
+    "city",
+    "state",
+    "pincode",
+    "age",
+    "quantity",
+    "units_available",
+    "event_time",
+    "updated_at",
+    "notes",
+]
 
 # ---------------------------------------------------------------------------
 # DB connections -- ports from docker-compose.yml
@@ -60,8 +86,8 @@ BLOOD_GROUP_DIST = {
 BLOOD_GROUPS = list(BLOOD_GROUP_DIST.keys())
 BG_WEIGHTS   = list(BLOOD_GROUP_DIST.values())
 
-REDCROSS_COMPONENTS = ["Whole Blood", "Packed RBC", "Fresh Frozen Plasma", "Platelets", "Cryoprecipitate"]
-WHO_COMPONENTS      = ["Whole Blood", "Packed RBC", "Fresh Frozen Plasma", "Platelets", "Cryoprecipitate"]
+REDCROSS_COMPONENTS = ["Whole Blood", "Packed RBC", "Fresh Frozen Plasma", "Plasma", "Platelets", "Cryoprecipitate"]
+WHO_COMPONENTS      = ["Whole Blood", "Packed RBC", "Fresh Frozen Plasma", "Plasma", "Platelets", "Cryoprecipitate"]
 
 
 def load_pincode_pool():
@@ -458,6 +484,86 @@ def full_name():
     return f"{random.choice(pool)} {random.choice(LAST_NAMES)}"
 
 
+def preview_record(
+    preview_rows,
+    *,
+    source,
+    entity_type,
+    bank_id="",
+    record_id="",
+    name="",
+    blood_group="",
+    component="",
+    category="",
+    contact="",
+    email="",
+    address="",
+    city="",
+    state="",
+    pincode="",
+    age="",
+    quantity="",
+    units_available="",
+    event_time="",
+    updated_at="",
+    notes="",
+):
+    preview_rows.append(
+        {
+            "source": source,
+            "entity_type": entity_type,
+            "bank_id": bank_id,
+            "record_id": record_id,
+            "name": name,
+            "blood_group": blood_group,
+            "component": component,
+            "category": category,
+            "contact": contact,
+            "email": email,
+            "address": address,
+            "city": city,
+            "state": state,
+            "pincode": pincode,
+            "age": age,
+            "quantity": quantity,
+            "units_available": units_available,
+            "event_time": event_time,
+            "updated_at": updated_at,
+            "notes": notes,
+        }
+    )
+
+
+def write_preview_csv(preview_rows):
+    rows = []
+
+    def take(entity_type, limit):
+        taken = 0
+        for row in preview_rows:
+            if row.get("entity_type") == entity_type:
+                rows.append(row)
+                taken += 1
+                if taken >= limit:
+                    break
+
+    take("blood_bank", 20)
+    take("blood_inventory", 40)
+    take("blood_donor", 40)
+
+    if len(rows) < CSV_PREVIEW_ROWS:
+        for row in preview_rows:
+            if row not in rows:
+                rows.append(row)
+                if len(rows) >= CSV_PREVIEW_ROWS:
+                    break
+
+    rows = rows[:CSV_PREVIEW_ROWS]
+    with CSV_PREVIEW_PATH.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=CSV_PREVIEW_HEADERS)
+        writer.writeheader()
+        writer.writerows(rows)
+
+
 # (banks_per_run removed — use BANKS_PER_RUN constant directly)
 
 
@@ -465,7 +571,7 @@ def full_name():
 # Red Cross seeder
 # ---------------------------------------------------------------------------
 
-def seed_redcross(conn):
+def seed_redcross(conn, preview_rows):
     cur = conn.cursor()
     inv_rows = []
 
@@ -492,10 +598,40 @@ def seed_redcross(conn):
             (name, category, phone, email, address, postal, bank_cat, bank_uat),
         )
         bb_id = cur.fetchone()[0]
+        preview_record(
+            preview_rows,
+            source="RedCross",
+            entity_type="blood_bank",
+            bank_id=bb_id,
+            record_id=bb_id,
+            name=name,
+            category=category,
+            contact=phone,
+            email=email,
+            address=address,
+            city=city,
+            state=state,
+            pincode=postal,
+            event_time=bank_cat,
+            updated_at=bank_uat,
+        )
 
         for bg in BLOOD_GROUPS:
             for comp in REDCROSS_COMPONENTS:
-                inv_rows.append((bb_id, bg, comp, inventory_qty(bg, comp), rnd_updated_at(bank_cat)))
+                qty = inventory_qty(bg, comp)
+                updated_at = rnd_updated_at(bank_cat)
+                inv_rows.append((bb_id, bg, comp, qty, updated_at))
+                preview_record(
+                    preview_rows,
+                    source="RedCross",
+                    entity_type="blood_inventory",
+                    bank_id=bb_id,
+                    record_id=f"{bb_id}:{bg}:{comp}",
+                    blood_group=bg,
+                    component=comp,
+                    quantity=qty,
+                    updated_at=updated_at,
+                )
 
     execute_values(
         cur,
@@ -528,6 +664,23 @@ def seed_redcross(conn):
             d_cat    = rnd_donor_created_at(age)
             d_uat    = rnd_updated_at(d_cat)
             batch.append((bb_id, fname, nat_id, contact, daddr, b_type, age, last_don, d_cat, d_uat))
+            preview_record(
+                preview_rows,
+                source="RedCross",
+                entity_type="blood_donor",
+                bank_id=bb_id,
+                record_id=nat_id,
+                name=fname,
+                blood_group=b_type,
+                contact=contact,
+                address=daddr,
+                city=city,
+                state=state,
+                pincode=postal,
+                age=age,
+                event_time=last_don,
+                updated_at=d_uat,
+            )
 
         execute_values(
             cur,
@@ -549,7 +702,7 @@ def seed_redcross(conn):
 # WHO seeder
 # ---------------------------------------------------------------------------
 
-def seed_who(conn):
+def seed_who(conn, preview_rows):
     cur = conn.cursor()
     inv_rows = []
 
@@ -576,10 +729,41 @@ def seed_who(conn):
             (name, category, phone, email, street, city, state, pincode, bank_cat, bank_uat),
         )
         bb_id = cur.fetchone()[0]
+        preview_record(
+            preview_rows,
+            source="WHO",
+            entity_type="blood_bank",
+            bank_id=bb_id,
+            record_id=bb_id,
+            name=name,
+            category=category,
+            contact=phone,
+            email=email,
+            address=street,
+            city=city,
+            state=state,
+            pincode=pincode,
+            event_time=bank_cat,
+            updated_at=bank_uat,
+        )
 
         for bg in BLOOD_GROUPS:
             for comp in WHO_COMPONENTS:
-                inv_rows.append((bb_id, bg, comp, inventory_qty(bg, comp), rnd_updated_at(bank_cat)))
+                qty = inventory_qty(bg, comp)
+                updated_at = rnd_updated_at(bank_cat)
+                inv_rows.append((bb_id, bg, comp, qty, updated_at))
+                preview_record(
+                    preview_rows,
+                    source="WHO",
+                    entity_type="blood_inventory",
+                    bank_id=bb_id,
+                    record_id=f"{bb_id}:{bg}:{comp}",
+                    blood_group=bg,
+                    component=comp,
+                    quantity=qty,
+                    units_available=qty,
+                    updated_at=updated_at,
+                )
 
     execute_values(
         cur,
@@ -611,6 +795,22 @@ def seed_who(conn):
             d_cat    = rnd_donor_created_at(age)
             d_uat    = rnd_updated_at(d_cat)
             batch.append((bb_id, fname, a_hash, phone_d, city, state, pincode, bg, age, last_don, d_cat, d_uat))
+            preview_record(
+                preview_rows,
+                source="WHO",
+                entity_type="blood_donor",
+                bank_id=bb_id,
+                record_id=a_hash,
+                name=fname,
+                blood_group=bg,
+                contact=phone_d,
+                city=city,
+                state=state,
+                pincode=pincode,
+                age=age,
+                event_time=last_don,
+                updated_at=d_uat,
+            )
 
         execute_values(
             cur,
@@ -634,11 +834,12 @@ def seed_who(conn):
 
 def main():
     print(f"Realistic DB seeder  (BANKS_PER_RUN={BANKS_PER_RUN}, DONORS_PER_RUN={DONORS_PER_RUN:,})\n")
+    preview_rows = []
 
     try:
         rc_conn = psycopg2.connect(**REDCROSS_DSN)
         print("[Red Cross] Connected -- port 5434")
-        seed_redcross(rc_conn)
+        seed_redcross(rc_conn, preview_rows)
         rc_conn.close()
     except Exception as exc:
         print(f"[Red Cross] ERROR: {exc}")
@@ -648,10 +849,16 @@ def main():
     try:
         who_conn = psycopg2.connect(**WHO_DSN)
         print("[WHO] Connected -- port 5435")
-        seed_who(who_conn)
+        seed_who(who_conn, preview_rows)
         who_conn.close()
     except Exception as exc:
         print(f"[WHO] ERROR: {exc}")
+
+    try:
+        write_preview_csv(preview_rows)
+        print(f"[CSV] Preview written -- {CSV_PREVIEW_PATH} ({min(len(preview_rows), CSV_PREVIEW_ROWS)} rows)")
+    except Exception as exc:
+        print(f"[CSV] ERROR: {exc}")
 
     print("\nSeeding complete.")
 

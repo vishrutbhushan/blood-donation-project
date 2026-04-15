@@ -7,6 +7,7 @@ export default function DonorSearchSection({
   otpVerified,
   loading,
   donorForm,
+  bloodGroups = [],
   onPhoneChange,
   onSendOtp,
   onOtpChange,
@@ -31,7 +32,8 @@ export default function DonorSearchSection({
         <label>
           Blood Group
           <select value={donorForm.bloodGroup} onChange={(event) => onDonorChange('bloodGroup', event.target.value)}>
-            {['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].map((group) => (
+            <option value="" disabled>Select blood group</option>
+            {bloodGroups.map((group) => (
               <option key={group} value={group}>
                 {group}
               </option>

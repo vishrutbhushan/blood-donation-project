@@ -17,7 +17,7 @@ import org.springframework.web.server.ResponseStatusException;
 @RequestMapping("/auth")
 public class AuthController {
 
-    private static final String HARDCODED_OTP = "1234";
+    private static final String HARDCODED_OTP = "123456";
 
     @PostMapping("/send-otp")
     public OtpSendResponseDTO sendOtp(@Valid @RequestBody OtpSendRequestDTO dto) {

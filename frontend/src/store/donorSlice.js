@@ -9,7 +9,7 @@ const donorSlice = createSlice({
     otpSent: false,
     otpValue: '',
     otpVerified: false,
-    form: { bloodGroup: 'B+', pincode: '' },
+    form: { bloodGroup: '', pincode: '' },
     donors: [],
     matchedCount: 0,
     confirmOpen: false,

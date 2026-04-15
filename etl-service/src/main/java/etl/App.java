@@ -33,6 +33,7 @@ public class App {
     private Map<String, Object> state;
     private final Map<String, Map<String, BloodBank>> banksBySource = new HashMap<>();
     private final Map<String, Map<String, Donor>> donorsBySource = new HashMap<>();
+    private volatile boolean bulkLoadDone;
 
     public App(
             JsonUtil json,
@@ -55,10 +56,10 @@ public class App {
     @PostConstruct
     public void onStart() {
         state = json.readFileMap(statePath());
+        if (state == null) {
+            state = new HashMap<>();
+        }
         bootstrapElasticsearchWithRetry();
-        state = new HashMap<>();
-        runInitialBackfillIfNeeded();
-        runIncremental();
     }
 
     private void bootstrapElasticsearchWithRetry() {
@@ -83,8 +84,11 @@ public class App {
         }
     }
 
-    @Scheduled(fixedDelay = Constants.SCHEDULE_MS)
-    public void runIncremental() {
+    @Scheduled(fixedDelayString = "${ETL_INCREMENTAL_INTERVAL_MS:300000}")
+    public synchronized void runIncremental() {
+        if (!bulkLoadDone) {
+            return;
+        }
         long now = System.currentTimeMillis();
         for (SourceHandler handler : sourceHandlers) {
             pullAndProcess(handler, getLastSyncTs(handler.sourceName()), now);
@@ -96,16 +100,25 @@ public class App {
         saveState();
     }
 
-    private void runInitialBackfillIfNeeded() {
+    public synchronized String triggerBulkLoad() {
+        if (bulkLoadDone) {
+            return "bulk load already completed";
+        }
+
+        banksBySource.clear();
+        donorsBySource.clear();
+
+        long now = System.currentTimeMillis();
         for (SourceHandler handler : sourceHandlers) {
-            if (!state.containsKey(handler.sourceName())) {
-                long now = System.currentTimeMillis();
-                pullAndProcess(handler, getLastSyncTs(handler.sourceName()), now);
-                setLastSyncTs(handler.sourceName(), now);
-            }
+            pullAndProcess(handler, Constants.INITIAL_PULL_START_TS, now);
         }
         flushToTargets();
+        for (SourceHandler handler : sourceHandlers) {
+            setLastSyncTs(handler.sourceName(), now);
+        }
+        bulkLoadDone = true;
         saveState();
+        return "bulk load completed";
     }
 
     private void pullAndProcess(SourceHandler handler, long fromTs, long toTs) {

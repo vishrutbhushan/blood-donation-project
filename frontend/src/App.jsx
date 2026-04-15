@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Accordion,
   AccordionDetails,
@@ -54,9 +54,6 @@ import {
   setOtpVerified,
   setProfile,
 } from './store/donorSlice';
-
-const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-', 'BOMBAY', 'RH NULL'];
-const COMPONENTS = ['Whole Blood', 'Packed RBC', 'Fresh Frozen Plasma', 'Platelet Concentrate', 'Plasma'];
 
 async function apiRequest(url, options = {}) {
   const response = await fetch(url, {
@@ -120,6 +117,7 @@ function tabIndex(screen) {
 
 export default function App() {
   const dispatch = useDispatch();
+  const [referenceData, setReferenceData] = useState({ bloodGroups: [], bloodComponents: [] });
 
   const { screen, loading, error, statusText, donorLoginOpen } = useSelector((state) => state.ui);
   const {
@@ -145,6 +143,40 @@ export default function App() {
     confirmOpen,
     searched,
   } = useSelector((state) => state.donor);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    apiRequest('/api/backend/reference-data')
+      .then((data) => {
+        if (cancelled) {
+          return;
+        }
+
+        const bloodGroups = Array.isArray(data?.bloodGroups) ? data.bloodGroups : [];
+        const bloodComponents = Array.isArray(data?.bloodComponents) ? data.bloodComponents : [];
+        setReferenceData({ bloodGroups, bloodComponents });
+
+        if (!form.bloodGroup && bloodGroups.length > 0) {
+          dispatch(setSearchField({ key: 'bloodGroup', value: bloodGroups[0] }));
+        }
+        if (!form.bloodComponent && bloodComponents.length > 0) {
+          dispatch(setSearchField({ key: 'bloodComponent', value: bloodComponents[0] }));
+        }
+        if (!donorForm.bloodGroup && bloodGroups.length > 0) {
+          dispatch(setDonorField({ key: 'bloodGroup', value: bloodGroups[0] }));
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          dispatch(setError('Reference data failed to load'));
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [dispatch]);
 
   const canSearch = useMemo(() => {
     return (
@@ -293,41 +325,16 @@ export default function App() {
       dispatch(setError('Invalid input'));
       return;
     }
-    if (activeRequest) {
-      dispatch(setError('Active request exists'));
-      return;
-    }
 
     dispatch(setLoading(true));
     dispatch(clearStatus());
 
     try {
-      let currentUserId = userId;
-      if (!currentUserId) {
-        const user = await apiRequest('/api/backend/users/get-or-create', {
-          method: 'POST',
-          body: JSON.stringify({ abhaId: '99990000111122' }),
-        });
-        currentUserId = user.userId;
-        dispatch(setUserId(currentUserId));
-      }
-
-      const createdSearch = await apiRequest(`/api/backend/searches/${currentUserId}`, {
-        method: 'POST',
-        body: JSON.stringify({
-          hospitalName: form.hospitalName.trim(),
-          hospitalPincode: form.hospitalPincode.trim(),
-          bloodGroup: form.bloodGroup,
-          bloodComponent: form.bloodComponent,
-        }),
-      });
-
-      dispatch(setSearchId(createdSearch.searchId));
+      dispatch(setSearchId(null));
       const bankRows = await fetchBanks(form.bloodGroup, form.bloodComponent, form.hospitalPincode.trim());
       dispatch(setBanks(bankRows));
       dispatch(setScreen('blood-banks'));
       dispatch(setStatusText('Search complete'));
-      await refreshUserState(currentUserId);
     } catch {
       dispatch(setError('Search failed'));
     } finally {
@@ -363,15 +370,30 @@ export default function App() {
   }
 
   async function confirmAndCreateRequest() {
-    if (!searchId) {
-      dispatch(setError('Search first'));
+    if (!otpVerified || !userId) {
+      dispatch(setError('Login required'));
       return;
     }
 
     dispatch(setLoading(true));
     dispatch(clearStatus());
     try {
-      const request = await apiRequest(`/api/backend/requests/${searchId}`, {
+      let resolvedSearchId = searchId;
+      if (!resolvedSearchId) {
+        const createdSearch = await apiRequest(`/api/backend/searches/${userId}`, {
+          method: 'POST',
+          body: JSON.stringify({
+            hospitalName: form.hospitalName.trim(),
+            hospitalPincode: form.hospitalPincode.trim(),
+            bloodGroup: form.bloodGroup,
+            bloodComponent: form.bloodComponent,
+          }),
+        });
+        resolvedSearchId = createdSearch.searchId;
+        dispatch(setSearchId(resolvedSearchId));
+      }
+
+      const request = await apiRequest(`/api/backend/requests/${resolvedSearchId}`, {
         method: 'POST',
         body: JSON.stringify({
           bloodGroup: donorForm.bloodGroup,
@@ -459,13 +481,15 @@ export default function App() {
               <FormControl>
                 <InputLabel>Blood Group</InputLabel>
                 <Select value={form.bloodGroup} label="Blood Group" onChange={(e) => updateForm('bloodGroup', e.target.value)}>
-                  {BLOOD_GROUPS.map((group) => <MenuItem key={group} value={group}>{group}</MenuItem>)}
+                  <MenuItem value="" disabled>Select blood group</MenuItem>
+                  {referenceData.bloodGroups.map((group) => <MenuItem key={group} value={group}>{group}</MenuItem>)}
                 </Select>
               </FormControl>
               <FormControl>
                 <InputLabel>Component</InputLabel>
                 <Select value={form.bloodComponent} label="Component" onChange={(e) => updateForm('bloodComponent', e.target.value)}>
-                  {COMPONENTS.map((component) => <MenuItem key={component} value={component}>{component}</MenuItem>)}
+                  <MenuItem value="" disabled>Select component</MenuItem>
+                  {referenceData.bloodComponents.map((component) => <MenuItem key={component} value={component}>{component}</MenuItem>)}
                 </Select>
               </FormControl>
               <TextField label="Hospital" value={form.hospitalName} onChange={(e) => updateForm('hospitalName', e.target.value)} />
@@ -473,7 +497,7 @@ export default function App() {
             </Box>
 
             <Box className="action-row">
-              <Button className="primary-btn" variant="contained" onClick={runSearch} disabled={loading || activeRequest}>Search</Button>
+              <Button className="primary-btn" variant="contained" onClick={runSearch} disabled={loading}>Search</Button>
             </Box>
 
             <Box className="results-wrap">
@@ -518,7 +542,8 @@ export default function App() {
                 <FormControl>
                   <InputLabel>Blood Group</InputLabel>
                   <Select value={donorForm.bloodGroup} label="Blood Group" onChange={(e) => updateDonorForm('bloodGroup', e.target.value)}>
-                    {BLOOD_GROUPS.map((group) => <MenuItem key={group} value={group}>{group}</MenuItem>)}
+                    <MenuItem value="" disabled>Select blood group</MenuItem>
+                    {referenceData.bloodGroups.map((group) => <MenuItem key={group} value={group}>{group}</MenuItem>)}
                   </Select>
                 </FormControl>
                 <TextField label="Pincode" value={donorForm.pincode} onChange={(e) => updateDonorForm('pincode', e.target.value)} />

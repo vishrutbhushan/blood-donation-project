@@ -3,8 +3,8 @@ import { createSlice } from '@reduxjs/toolkit';
 const initialForm = {
   patientName: '',
   phone: '',
-  bloodGroup: 'B+',
-  bloodComponent: 'Whole Blood',
+  bloodGroup: '',
+  bloodComponent: '',
   hospitalName: '',
   hospitalPincode: '',
   unitsRequested: 1,

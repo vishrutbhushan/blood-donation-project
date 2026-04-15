@@ -79,6 +79,8 @@ Services communicate directly over the Docker Compose network using service name
 - The WHO service connects to `who-db`.
 - Grafana connects to Elasticsearch and ClickHouse through provisioned datasources.
 - The ETL service, when run, talks to the source services and pushes data to ClickHouse and Elasticsearch.
+- The ETL service does not start bulk loading automatically. Call `GET http://localhost:8083/admin/etl/bulk-load` to trigger the bulk load manually, then incremental runs become eligible.
+- Set `ETL_INCREMENTAL_INTERVAL_MS` in [`.env`](.env) to change how often incremental ETL runs. The default is `300000` ms, which is 5 minutes.
 
 The Spring Boot services resolve database and search settings from environment variables through their application property files. The ETL service reads its runtime URLs and credentials from environment variables directly, which are still provided by the shared `.env` file.
 
