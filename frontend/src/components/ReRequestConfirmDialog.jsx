@@ -1,21 +1,18 @@
 import React from 'react';
-import { Button, Dialog, DialogActions, DialogContent, DialogTitle, Typography } from '@mui/material';
+import RequestConfirmationDialog from './RequestConfirmationDialog';
 
 export default function ReRequestConfirmDialog({ open, preview, onCancel, onConfirm }) {
   return (
-    <Dialog open={open} onClose={onCancel} fullWidth maxWidth="xs">
-      <DialogTitle>Confirm Re-request</DialogTitle>
-      <DialogContent>
-        <Typography>Total matched: {preview.totalMatched}</Typography>
-        <Typography>{'<10 km'}: {preview.below10Km}</Typography>
-        <Typography>{'10 to <50 km'}: {preview.below50Km}</Typography>
-        <Typography>{'>=50 km'}: {preview.above50Km}</Typography>
-        <Typography sx={{ mt: 1 }}>Proceed with a new re-request dispatch?</Typography>
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={onCancel}>Cancel</Button>
-        <Button onClick={onConfirm} className="primary-btn" variant="contained">Confirm</Button>
-      </DialogActions>
-    </Dialog>
+    <RequestConfirmationDialog
+      open={open}
+      title="Confirm Re-request"
+      totalMatched={preview.totalMatched}
+      below10Km={preview.below10Km}
+      below50Km={preview.below50Km}
+      above50Km={preview.above50Km}
+      prompt="Proceed with a new re-request dispatch?"
+      onCancel={onCancel}
+      onConfirm={onConfirm}
+    />
   );
 }

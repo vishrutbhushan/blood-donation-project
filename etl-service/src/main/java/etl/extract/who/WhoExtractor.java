@@ -2,8 +2,6 @@ package etl.extract.who;
 
 import etl.constants.Constants;
 import etl.util.JsonUtil;
-import java.util.ArrayList;
-import java.util.List;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
@@ -11,7 +9,6 @@ import org.springframework.web.client.RestClient;
 public class WhoExtractor {
     private final JsonUtil jsonUtil;
     private final RestClient restClient;
-    private final List<Object> inMemoryPayloads = new ArrayList<>();
 
     public WhoExtractor(JsonUtil jsonUtil) {
         this.jsonUtil = jsonUtil;
@@ -26,12 +23,6 @@ public class WhoExtractor {
         if (body == null) {
             throw new RuntimeException("who api returned empty body");
         }
-        Object payload = jsonUtil.parse(body);
-        inMemoryPayloads.add(payload);
-        return payload;
-    }
-
-    public List<Object> getInMemoryPayloads() {
-        return inMemoryPayloads;
+        return jsonUtil.parse(body);
     }
 }

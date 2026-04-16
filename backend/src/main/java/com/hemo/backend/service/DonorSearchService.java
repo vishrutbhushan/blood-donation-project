@@ -101,7 +101,7 @@ public class DonorSearchService {
         Set<String> excluded = excludedDonorIds == null ? Collections.emptySet() : new HashSet<>(excludedDonorIds);
 
         try {
-            String body = buildQuery(compatibleGroups, geoPoint, safeOffset, safeLimit);
+            String body = buildElasticsearchQuery(compatibleGroups, geoPoint, safeOffset, safeLimit);
             String json = elasticsearchClient.post()
                 .uri("/donor_availability_current/_search")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -181,7 +181,7 @@ public class DonorSearchService {
         }
     }
 
-    private String buildQuery(List<String> compatibleGroups, PincodeGeoService.GeoPoint geoPoint, int offset, int limit) {
+    private String buildElasticsearchQuery(List<String> compatibleGroups, PincodeGeoService.GeoPoint geoPoint, int offset, int limit) {
         String terms = compatibleGroups.stream()
                 .map(v -> "\"" + escape(v) + "\"")
                 .collect(Collectors.joining(","));
@@ -203,7 +203,7 @@ public class DonorSearchService {
         return value.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 
-    public DonorSearchSummaryDTO toSummary(DonorSearchResponseDTO response) {
+    public DonorSearchSummaryDTO toSummaryDTO(DonorSearchResponseDTO response) {
         return DonorSearchSummaryDTO.builder()
             .recipientBloodGroup(response.getRecipientBloodGroup())
             .compatibleDonorGroups(response.getCompatibleDonorGroups())

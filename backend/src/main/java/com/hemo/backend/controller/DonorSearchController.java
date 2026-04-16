@@ -25,6 +25,6 @@ public class DonorSearchController {
             @RequestParam(defaultValue = "200") int limit) {
         DonorSearchResponseDTO response = donorSearchService.searchCompatibleDonors(bloodGroup, pincode, offset, limit);
         log.info("donor search bloodGroup={} pincode={} offset={} limit={} matched={}", bloodGroup, pincode, offset, limit, response.getTotalMatched());
-        return donorSearchService.toSummary(response);
+        return donorSearchService.toSummaryDTO(response);
     }
 }

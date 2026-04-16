@@ -12,7 +12,6 @@ public final class Constants {
     public static final String SOURCE_REDCROSS = "redcross";
 
     public static final long INITIAL_PULL_START_TS = 1704067200000L;
-    public static final long INCREMENT_WINDOW_MS = 6L * 60L * 60L * 1000L;
     public static final String DATA_DIR = "/data";
 
     public static final String KEY_LAST_SYNC = "last_sync";

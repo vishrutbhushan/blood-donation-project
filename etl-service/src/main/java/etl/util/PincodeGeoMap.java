@@ -24,10 +24,6 @@ public class PincodeGeoMap {
         return geoMap.get(pin.trim());
     }
 
-    public Map<String, GeoPoint> asMap() {
-        return geoMap;
-    }
-
     private Map<String, GeoPoint> loadFromResource() {
         try (InputStream is = getClass().getClassLoader().getResourceAsStream("pincode-map.json")) {
             if (is == null) {

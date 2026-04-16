@@ -47,7 +47,7 @@ public interface ResponseRepository extends JpaRepository<Response, Long> {
                                                         AND rp.responseStatus = 'YES'
                                                 ORDER BY rp.respondedAt DESC
                                                 """)
-                List<Response> findRespondedByUserId(@Param("userId") Long userId);
+                List<Response> findAcceptedResponsesByUserId(@Param("userId") Long userId);
 
     @Query("""
             SELECT rp

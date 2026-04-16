@@ -30,6 +30,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import ConfirmRequestDialog from './components/ConfirmRequestDialog';
 import DonorLoginDialog from './components/DonorLoginDialog';
 import ReRequestConfirmDialog from './components/ReRequestConfirmDialog';
+import apiRequest from './lib/apiRequest';
 import { clearStatus, setDonorLoginOpen, setError, setLoading, setScreen, setStatusText } from './store/uiSlice';
 import {
   setActiveRequest,
@@ -53,28 +54,6 @@ import {
   setOtpVerified,
   setProfile,
 } from './store/donorSlice';
-
-async function apiRequest(url, options = {}) {
-  const response = await fetch(url, {
-    headers: { 'Content-Type': 'application/json' },
-    ...options,
-  });
-
-  if (!response.ok) {
-    let message = 'Request failed';
-    try {
-      const text = await response.text();
-      if (text) {
-        message = text;
-      }
-    } catch {
-      message = 'Request failed';
-    }
-    throw new Error(message);
-  }
-
-  return response.json();
-}
 
 function tabIndex(screen) {
   if (screen === 'donors') {
@@ -169,11 +148,11 @@ export default function App() {
     );
   }, [form]);
 
-  function updateForm(key, value) {
+  function updateSearchForm(key, value) {
     dispatch(setSearchField({ key, value }));
   }
 
-  function updateDonorForm(key, value) {
+  function updateDonorSearchForm(key, value) {
     dispatch(setDonorField({ key, value }));
   }
 
@@ -191,11 +170,11 @@ export default function App() {
     dispatch(setResponses(responseRows));
   }
 
-  function closeDonorLogin() {
+  function closeDonorLoginDialog() {
     dispatch(setDonorLoginOpen(false));
   }
 
-  function openDonorLogin() {
+  function openDonorLoginDialog() {
     dispatch(setDonorLoginOpen(true));
     dispatch(clearStatus());
   }
@@ -259,7 +238,7 @@ export default function App() {
     }
   }
 
-  async function fetchBanks(group, component, pincode) {
+  async function fetchAndTransformBanks(group, component, pincode) {
     const query = new URLSearchParams({
       pincode: pincode || '',
       bloodGroup: group || '',
@@ -297,7 +276,7 @@ export default function App() {
     };
   }
 
-  async function runSearch() {
+  async function searchBloodBanks() {
     if (!canSearch) {
       dispatch(setError('Invalid input'));
       return;
@@ -308,7 +287,7 @@ export default function App() {
 
     try {
       dispatch(setSearchId(null));
-      const bankRows = await fetchBanks(form.bloodGroup, form.bloodComponent, form.hospitalPincode.trim());
+      const bankRows = await fetchAndTransformBanks(form.bloodGroup, form.bloodComponent, form.hospitalPincode.trim());
       dispatch(setBanks(bankRows));
       dispatch(setScreen('blood-banks'));
       dispatch(setStatusText('Search complete'));
@@ -319,7 +298,7 @@ export default function App() {
     }
   }
 
-  async function runDonorSearch() {
+  async function searchDonors() {
     if (!otpVerified) {
       dispatch(setError('Login required'));
       return;
@@ -447,14 +426,14 @@ export default function App() {
     }
   }
 
-  function onTabChange(_event, newValue) {
+  function handleScreenTabChange(_event, newValue) {
     if (newValue === 0) {
       dispatch(setScreen('blood-banks'));
       return;
     }
 
     if (!otpVerified) {
-      openDonorLogin();
+      openDonorLoginDialog();
       return;
     }
 
@@ -469,7 +448,7 @@ export default function App() {
             <WaterDropOutlinedIcon className="drop-icon" />
             <Typography variant="h6" className="brand-title">Hemo Connect</Typography>
           </Box>
-          <Tabs value={tabIndex(screen)} onChange={onTabChange} className="main-tabs" textColor="inherit" indicatorColor="secondary">
+          <Tabs value={tabIndex(screen)} onChange={handleScreenTabChange} className="main-tabs" textColor="inherit" indicatorColor="secondary">
             <Tab label="Search for Blood Banks" />
             <Tab label="Search for Donors" />
           </Tabs>
@@ -482,28 +461,28 @@ export default function App() {
         {screen === 'blood-banks' && (
           <Paper className="panel" variant="outlined" elevation={0}>
             <Box className="form-grid">
-              <TextField label="Patient Name" value={form.patientName} onChange={(e) => updateForm('patientName', e.target.value)} />
-              <TextField label="Phone" value={form.phone} onChange={(e) => updateForm('phone', e.target.value)} />
+              <TextField label="Patient Name" value={form.patientName} onChange={(e) => updateSearchForm('patientName', e.target.value)} />
+              <TextField label="Phone" value={form.phone} onChange={(e) => updateSearchForm('phone', e.target.value)} />
               <FormControl>
                 <InputLabel>Blood Group</InputLabel>
-                <Select value={form.bloodGroup} label="Blood Group" onChange={(e) => updateForm('bloodGroup', e.target.value)}>
+                <Select value={form.bloodGroup} label="Blood Group" onChange={(e) => updateSearchForm('bloodGroup', e.target.value)}>
                   <MenuItem value="" disabled>Select blood group</MenuItem>
                   {referenceData.bloodGroups.map((group) => <MenuItem key={group} value={group}>{group}</MenuItem>)}
                 </Select>
               </FormControl>
               <FormControl>
                 <InputLabel>Component</InputLabel>
-                <Select value={form.bloodComponent} label="Component" onChange={(e) => updateForm('bloodComponent', e.target.value)}>
+                <Select value={form.bloodComponent} label="Component" onChange={(e) => updateSearchForm('bloodComponent', e.target.value)}>
                   <MenuItem value="" disabled>Select component</MenuItem>
                   {referenceData.bloodComponents.map((component) => <MenuItem key={component} value={component}>{component}</MenuItem>)}
                 </Select>
               </FormControl>
-              <TextField label="Hospital" value={form.hospitalName} onChange={(e) => updateForm('hospitalName', e.target.value)} />
-              <TextField label="Pincode" value={form.hospitalPincode} onChange={(e) => updateForm('hospitalPincode', e.target.value)} />
+              <TextField label="Hospital" value={form.hospitalName} onChange={(e) => updateSearchForm('hospitalName', e.target.value)} />
+              <TextField label="Pincode" value={form.hospitalPincode} onChange={(e) => updateSearchForm('hospitalPincode', e.target.value)} />
             </Box>
 
             <Box className="action-row">
-              <Button className="primary-btn" variant="contained" onClick={runSearch} disabled={loading}>Search</Button>
+              <Button className="primary-btn" variant="contained" onClick={searchBloodBanks} disabled={loading}>Search</Button>
             </Box>
 
             <Box className="results-wrap">
@@ -547,15 +526,15 @@ export default function App() {
               <Box className="form-grid">
                 <FormControl>
                   <InputLabel>Blood Group</InputLabel>
-                  <Select value={donorForm.bloodGroup} label="Blood Group" onChange={(e) => updateDonorForm('bloodGroup', e.target.value)}>
+                  <Select value={donorForm.bloodGroup} label="Blood Group" onChange={(e) => updateDonorSearchForm('bloodGroup', e.target.value)}>
                     <MenuItem value="" disabled>Select blood group</MenuItem>
                     {referenceData.bloodGroups.map((group) => <MenuItem key={group} value={group}>{group}</MenuItem>)}
                   </Select>
                 </FormControl>
-                <TextField label="Pincode" value={donorForm.pincode} onChange={(e) => updateDonorForm('pincode', e.target.value)} />
+                <TextField label="Pincode" value={donorForm.pincode} onChange={(e) => updateDonorSearchForm('pincode', e.target.value)} />
               </Box>
               <Box className="action-row">
-                <Button className="primary-btn" variant="contained" onClick={runDonorSearch} disabled={loading || !otpVerified || activeRequest}>Search Donors</Button>
+                <Button className="primary-btn" variant="contained" onClick={searchDonors} disabled={loading || !otpVerified || activeRequest}>Search Donors</Button>
               </Box>
 
               {searched && (
@@ -664,14 +643,6 @@ export default function App() {
         )}
       </Container>
 
-      <Box component="footer" className="app-footer">
-        <Container maxWidth="lg" className="footer-inner">
-          <Typography variant="body2">{loading ? 'Loading...' : statusText || 'Ready'}</Typography>
-          <Typography variant="body2">User: {name || '-'}</Typography>
-          <Typography variant="body2">Mobile: {phone || '-'}</Typography>
-          <Typography variant="body2">Last Request: {lastRequestId || '-'}</Typography>
-        </Container>
-      </Box>
 
       <DonorLoginDialog
         open={donorLoginOpen}
@@ -688,7 +659,7 @@ export default function App() {
         onOtpChange={(value) => dispatch(setOtpValue(value))}
         onSendOtp={sendDonorOtp}
         onVerify={verifyDonorOtp}
-        onClose={closeDonorLogin}
+        onClose={closeDonorLoginDialog}
       />
 
       <ConfirmRequestDialog

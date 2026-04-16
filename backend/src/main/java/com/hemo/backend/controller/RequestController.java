@@ -68,7 +68,7 @@ public class RequestController {
 
     @GetMapping("/user/{userId}/active")
     public ActiveRequestStatusDTO hasActive(@PathVariable Long userId) {
-        boolean active = requestService.hasActiveRequest(userId);
+        boolean active = requestService.hasActiveRequestForUser(userId);
         log.info("request active-status userId={} active={}", userId, active);
         return new ActiveRequestStatusDTO(active);
     }

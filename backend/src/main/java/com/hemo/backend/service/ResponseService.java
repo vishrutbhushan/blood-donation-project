@@ -36,14 +36,14 @@ public class ResponseService {
         response.setLocation(dto.getLocation());
         response.setResponseStatus(dto.getResponseStatus());
 
-        return toRecord(responseRepository.save(response));
+        return ResponseRecordMapper.toDto(responseRepository.save(response));
     }
 
     @Transactional(readOnly = true)
     public List<ResponseRecordDTO> getResponsesByRequest(Long requestId) {
         return responseRepository.findByRequestId(requestId)
                 .stream()
-                .map(this::toRecord)
+                .map(ResponseRecordMapper::toDto)
                 .toList();
     }
 
@@ -57,21 +57,6 @@ public class ResponseService {
         Response response = pending.get(0);
         response.setResponseStatus("YES");
         response.setRespondedAt(LocalDateTime.now());
-        return toRecord(responseRepository.save(response));
-    }
-
-    private ResponseRecordDTO toRecord(Response response) {
-        return ResponseRecordDTO.builder()
-                .responseId(response.getResponseId())
-                .requestId(response.getRequest().getRequestId())
-                .donorId(response.getDonorId())
-                .donorName(response.getDonorName())
-                .abhaId(response.getAbhaId())
-                .phoneNumber(response.getPhoneNumber())
-                .bloodGroup(response.getBloodGroup())
-                .location(response.getLocation())
-                .responseStatus(response.getResponseStatus())
-                .respondedAt(response.getRespondedAt())
-                .build();
+        return ResponseRecordMapper.toDto(responseRepository.save(response));
     }
 }

@@ -5,7 +5,6 @@ import etl.extract.redcross.RedcrossExtractor;
 import etl.model.EtlBatch;
 import etl.transform.redcross.RedcrossTransformPipeline;
 import etl.util.PincodeGeoMap;
-import java.util.List;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -31,10 +30,5 @@ public class RedcrossSourceHandler implements SourceHandler {
     @Override
     public EtlBatch transform(Object payload, PincodeGeoMap geoMap) {
         return transformer.run(payload, geoMap);
-    }
-
-    @Override
-    public List<Object> inMemoryPayloads() {
-        return extractor.getInMemoryPayloads();
     }
 }

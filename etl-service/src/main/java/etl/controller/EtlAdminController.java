@@ -20,8 +20,8 @@ public class EtlAdminController {
     @GetMapping("/bulk-load")
     public ResponseEntity<String> triggerBulkLoad() {
         log.info("etl bulk-load trigger requested");
-        String result = app.triggerBulkLoad();
+        String result = app.startBulkLoad();
         log.info("etl bulk-load trigger result={}", result);
-        return ResponseEntity.ok(result);
+        return ResponseEntity.accepted().body(result);
     }
 }

@@ -174,20 +174,6 @@ body {
   color: #6c393d;
 }
 
-.app-footer {
-  background: linear-gradient(90deg, #4a0d12, #6f131a);
-  color: #fbecee;
-  border-top: 2px solid #40090e;
-}
-
-.footer-inner {
-  min-height: 54px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
 .login-grid {
   display: grid;
   gap: 10px;
@@ -210,11 +196,4 @@ body {
     width: 100%;
   }
 
-  .footer-inner {
-    flex-direction: column;
-    justify-content: center;
-    text-align: center;
-    padding-top: 10px;
-    padding-bottom: 10px;
-  }
 }

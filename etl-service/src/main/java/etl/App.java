@@ -10,7 +10,6 @@ import etl.source.SourceHandler;
 import etl.util.JsonUtil;
 import etl.util.PincodeGeoMap;
 import etl.util.TimeUtil;
-import jakarta.annotation.PostConstruct;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -34,6 +33,8 @@ public class App {
     private final Map<String, Map<String, BloodBank>> banksBySource = new HashMap<>();
     private final Map<String, Map<String, Donor>> donorsBySource = new HashMap<>();
     private volatile boolean bulkLoadDone;
+    private volatile boolean initialized;
+    private volatile boolean bulkLoadRunning;
 
     public App(
             JsonUtil json,
@@ -53,39 +54,39 @@ public class App {
         SpringApplication.run(App.class, args);
     }
 
-    @PostConstruct
-    public void onStart() {
+    private synchronized void initializeIfNeeded() {
+        if (initialized) {
+            return;
+        }
         state = json.readFileMap(statePath());
         if (state == null) {
             state = new HashMap<>();
         }
-        bootstrapElasticsearchWithRetry();
+        bulkLoadDone = hasCompletedBulkState();
+        elasticsearchLoader.bootstrap();
+        initialized = true;
     }
 
-    private void bootstrapElasticsearchWithRetry() {
-        final int maxAttempts = 18;
-        final long delayMs = 5000L;
-
-        for (int attempt = 1; attempt <= maxAttempts; attempt++) {
-            try {
-                elasticsearchLoader.bootstrap();
-                return;
-            } catch (RuntimeException ex) {
-                if (attempt == maxAttempts) {
-                    throw ex;
-                }
-                try {
-                    Thread.sleep(delayMs);
-                } catch (InterruptedException ie) {
-                    Thread.currentThread().interrupt();
-                    throw new IllegalStateException("interrupted while waiting to retry Elasticsearch bootstrap", ie);
-                }
+    private boolean hasCompletedBulkState() {
+        if (state == null || state.isEmpty()) {
+            return false;
+        }
+        for (SourceHandler handler : sourceHandlers) {
+            Object sourceState = state.get(handler.sourceName());
+            if (!(sourceState instanceof Map)) {
+                return false;
+            }
+            Object val = ((Map<?, ?>) sourceState).get(Constants.KEY_LAST_SYNC);
+            if (val == null || String.valueOf(val).isBlank()) {
+                return false;
             }
         }
+        return true;
     }
 
     @Scheduled(fixedDelayString = "${ETL_INCREMENTAL_INTERVAL_MS:300000}")
     public synchronized void runIncremental() {
+        initializeIfNeeded();
         if (!bulkLoadDone) {
             return;
         }
@@ -100,9 +101,31 @@ public class App {
         saveState();
     }
 
-    public synchronized String triggerBulkLoad() {
+    public synchronized String startBulkLoad() {
+        initializeIfNeeded();
         if (bulkLoadDone) {
             return "bulk load already completed";
+        }
+        if (bulkLoadRunning) {
+            return "bulk load already running";
+        }
+
+        bulkLoadRunning = true;
+        Thread worker = new Thread(() -> {
+            try {
+                runBulkLoad();
+            } finally {
+                bulkLoadRunning = false;
+            }
+        }, "etl-bulk-load");
+        worker.setDaemon(true);
+        worker.start();
+        return "bulk load started";
+    }
+
+    private synchronized void runBulkLoad() {
+        if (bulkLoadDone) {
+            return;
         }
 
         banksBySource.clear();
@@ -118,18 +141,12 @@ public class App {
         }
         bulkLoadDone = true;
         saveState();
-        return "bulk load completed";
     }
 
     private void pullAndProcess(SourceHandler handler, long fromTs, long toTs) {
-        long cursor = fromTs;
-        while (cursor < toTs) {
-            long end = Math.min(cursor + Constants.INCREMENT_WINDOW_MS, toTs);
-            Object payload = handler.fetchIncremental(cursor, end);
-            EtlBatch batch = handler.transform(payload, pincodeGeoMap);
-            mergeSourceBatch(handler.sourceName(), batch);
-            cursor = end;
-        }
+        Object payload = handler.fetchIncremental(fromTs, toTs);
+        EtlBatch batch = handler.transform(payload, pincodeGeoMap);
+        mergeSourceBatch(handler.sourceName(), batch);
     }
 
     private void mergeSourceBatch(String source, EtlBatch batch) {

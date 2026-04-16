@@ -7,7 +7,6 @@ import com.hemo.backend.dto.RequestDTO;
 import com.hemo.backend.dto.RequestSummaryDTO;
 import com.hemo.backend.dto.ResponseRecordDTO;
 import com.hemo.backend.entity.Request;
-import com.hemo.backend.entity.Response;
 import com.hemo.backend.exception.GlobalExceptionHandler.AppException;
 import com.hemo.backend.repository.RequestRepository;
 import com.hemo.backend.repository.ResponseRepository;
@@ -35,7 +34,7 @@ public class RequestService {
                 .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, "Search not found"));
 
         Long userId = search.getUser().getUserId();
-        if (hasActiveRequest(userId)) {
+        if (hasActiveRequestForUser(userId)) {
             throw new AppException(HttpStatus.CONFLICT, "Active request exists");
         }
 
@@ -112,9 +111,9 @@ public class RequestService {
 
     @Transactional(readOnly = true)
     public List<ResponseRecordDTO> getUserResponses(@NonNull Long userId) {
-        return responseRepository.findRespondedByUserId(userId)
+        return responseRepository.findAcceptedResponsesByUserId(userId)
                 .stream()
-                .map(this::toResponseRecord)
+            .map(ResponseRecordMapper::toDto)
                 .toList();
     }
 
@@ -129,11 +128,11 @@ public class RequestService {
             200,
             responseRepository.findContactedDonorIdsBySearchId(request.getSearch().getSearchId())
         );
-        return donorSearchService.toSummary(donorBatch);
+        return donorSearchService.toSummaryDTO(donorBatch);
     }
 
     @Transactional(readOnly = true)
-    public boolean hasActiveRequest(@NonNull Long userId) {
+    public boolean hasActiveRequestForUser(@NonNull Long userId) {
         return requestRepository.countActiveByUser(userId) > 0;
     }
 
@@ -177,18 +176,4 @@ public class RequestService {
         return request;
     }
 
-    private ResponseRecordDTO toResponseRecord(Response response) {
-        return ResponseRecordDTO.builder()
-                .responseId(response.getResponseId())
-                .requestId(response.getRequest().getRequestId())
-                .donorId(response.getDonorId())
-                .donorName(response.getDonorName())
-                .abhaId(response.getAbhaId())
-                .phoneNumber(response.getPhoneNumber())
-                .bloodGroup(response.getBloodGroup())
-                .location(response.getLocation())
-                .responseStatus(response.getResponseStatus())
-                .respondedAt(response.getRespondedAt())
-                .build();
-    }
 }
