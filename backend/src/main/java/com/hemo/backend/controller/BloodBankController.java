@@ -28,8 +28,9 @@ public class BloodBankController {
     public List<BloodBankDTO> getNearestBloodBanks(
             @RequestParam Double latitude,
             @RequestParam Double longitude) {
+        log.info("api.enter blood-banks.nearest-20 latitude={} longitude={}", latitude, longitude);
         List<BloodBankDTO> banks = bloodBankService.findNearestBloodBanks(latitude, longitude);
-        log.info("nearest blood banks requested latitude={} longitude={} returned={}", latitude, longitude, banks.size());
+        log.info("api.exit blood-banks.nearest-20 count={}", banks.size());
         return banks;
     }
 
@@ -38,6 +39,7 @@ public class BloodBankController {
             @RequestParam String pincode,
             @RequestParam(required = false) String bloodGroup,
             @RequestParam(required = false) String component) {
+        log.info("api.enter blood-banks.search pincode={} bloodGroup={} component={}", pincode, bloodGroup, component);
         PincodeGeoService.GeoPoint geoPoint = pincodeGeoService.resolve(pincode)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported pincode"));
 
@@ -47,7 +49,7 @@ public class BloodBankController {
                 .toList();
 
         List<BloodBankDTO> response = exactPincode.isEmpty() ? nearest : exactPincode;
-        log.info("blood bank search by pincode={} bloodGroup={} component={} returned={}", pincode, bloodGroup, component, response.size());
+        log.info("api.exit blood-banks.search count={}", response.size());
         return response;
     }
 }

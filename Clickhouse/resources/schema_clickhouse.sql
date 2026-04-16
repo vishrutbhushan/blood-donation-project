@@ -2,8 +2,8 @@ CREATE DATABASE IF NOT EXISTS blood_ops;
 
 /*
 Star schema aligned to source-of-truth systems:
-- Redcross: blood_bank, blood_inventory, blood_donor
-- WHO: blood_bank, blood_inventory, blood_donor
+- Redcross: blood_bank, blood_inventory_transaction, blood_donor
+- WHO: blood_bank, blood_inventory_transaction, blood_donor
 */
 
 DROP VIEW IF EXISTS blood_ops.mv_ingestion_hourly_to_fact;
@@ -11,7 +11,9 @@ DROP VIEW IF EXISTS blood_ops.mv_ingestion_hourly_to_fact;
 DROP TABLE IF EXISTS blood_ops.fact_ingestion_event;
 DROP TABLE IF EXISTS blood_ops.source_ingestion_hourly_agg;
 DROP TABLE IF EXISTS blood_ops.fact_donor_snapshot;
-DROP TABLE IF EXISTS blood_ops.fact_inventory_snapshot;
+DROP TABLE IF EXISTS blood_ops.fact_inventory_day;
+DROP TABLE IF EXISTS blood_ops.fact_inventory_transaction;
+DROP TABLE IF EXISTS blood_ops.fact_donor_day;
 
 DROP TABLE IF EXISTS blood_ops.dim_time;
 DROP TABLE IF EXISTS blood_ops.dim_date;
@@ -120,25 +122,46 @@ CREATE TABLE IF NOT EXISTS blood_ops.dim_time (
 ENGINE = MergeTree
 ORDER BY time_id;
 
-CREATE TABLE IF NOT EXISTS blood_ops.fact_inventory_snapshot (
-    inventory_fact_id UInt64,
+CREATE TABLE IF NOT EXISTS blood_ops.fact_inventory_transaction (
+    source_transaction_id String,
+    source_event_id String,
     source_id UInt8,
     bank_id UInt64,
-    location_id UInt64,
-    blood_group_id UInt8,
-    component_id UInt8,
-    event_time_id UInt32,
-    event_date_id UInt32,
-    units_available Int32,
-    record_count UInt8 DEFAULT 1,
+    donor_sk UInt64,
+    blood_group LowCardinality(String),
+    component LowCardinality(String),
+    transaction_type LowCardinality(String),
+    units_delta Int32,
+    running_balance_after Int32,
+    expiry_date Nullable(Date),
+    event_time DateTime,
     is_deleted UInt8 DEFAULT 0,
-    snapshot_updated_at DateTime,
     ingested_at DateTime DEFAULT now(),
     version UInt64
 )
 ENGINE = ReplacingMergeTree(version)
-PARTITION BY toYYYYMM(toDate(snapshot_updated_at))
-ORDER BY (event_date_id, source_id, bank_id, blood_group_id, component_id, inventory_fact_id);
+PARTITION BY toYYYYMM(toDate(event_time))
+ORDER BY (source_id, source_transaction_id);
+
+CREATE TABLE IF NOT EXISTS blood_ops.fact_inventory_day (
+    event_date Date,
+    source_id UInt8,
+    bank_id UInt64,
+    blood_group LowCardinality(String),
+    component LowCardinality(String),
+    opening_balance_units Int32,
+    inflow_units Int32,
+    outflow_units Int32,
+    adjustment_units Int32,
+    closing_balance_units Int32,
+    donation_events_count UInt32,
+    withdrawal_events_count UInt32,
+    updated_at DateTime DEFAULT now(),
+    version UInt64
+)
+ENGINE = ReplacingMergeTree(version)
+PARTITION BY toYYYYMM(event_date)
+ORDER BY (event_date, source_id, bank_id, blood_group, component);
 
 CREATE TABLE IF NOT EXISTS blood_ops.fact_donor_snapshot (
     donor_fact_id UInt64,
@@ -161,6 +184,20 @@ CREATE TABLE IF NOT EXISTS blood_ops.fact_donor_snapshot (
 ENGINE = ReplacingMergeTree(version)
 PARTITION BY toYYYYMM(toDate(snapshot_updated_at))
 ORDER BY (event_date_id, source_id, bank_id, blood_group_id, donor_sk, donor_fact_id);
+
+CREATE TABLE IF NOT EXISTS blood_ops.fact_donor_day (
+    event_date Date,
+    source_id UInt8,
+    bank_id UInt64,
+    blood_group_id UInt8,
+    total_donors UInt32,
+    eligible_donors UInt32,
+    updated_at DateTime DEFAULT now(),
+    version UInt64
+)
+ENGINE = ReplacingMergeTree(version)
+PARTITION BY toYYYYMM(event_date)
+ORDER BY (event_date, source_id, bank_id, blood_group_id);
 
 CREATE TABLE IF NOT EXISTS blood_ops.fact_ingestion_event (
     event_time_id UInt32,

@@ -4,6 +4,7 @@ import com.hemo.backend.dto.ErrorResponseDTO;
 import com.hemo.backend.dto.ValidationErrorDTO;
 import com.hemo.backend.dto.ValidationErrorsResponseDTO;
 import java.util.List;
+import java.util.Objects;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -18,8 +19,9 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(AppException.class)
     public ResponseEntity<?> handleAppException(AppException ex) {
-        log.warn("app exception status={} message={}", ex.getStatus(), ex.getMessage());
-        return ResponseEntity.status(ex.getStatus()).body(new ErrorResponseDTO(ex.getMessage()));
+        HttpStatus status = Objects.requireNonNull(ex.getStatus(), "status");
+        log.warn("app exception status={} message={}", status, ex.getMessage());
+        return ResponseEntity.status(status).body(new ErrorResponseDTO(ex.getMessage()));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
@@ -35,7 +37,8 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(ResponseStatusException.class)
     public ResponseEntity<?> handleResponseStatus(ResponseStatusException ex) {
-        String reason = ex.getReason() == null || ex.getReason().isBlank() ? "Request failed" : ex.getReason();
+        String rawReason = ex.getReason();
+        String reason = rawReason == null || rawReason.isBlank() ? "Request failed" : rawReason;
         log.warn("response status exception status={} reason={}", ex.getStatusCode(), reason);
         return ResponseEntity.status(ex.getStatusCode()).body(new ErrorResponseDTO(reason));
     }

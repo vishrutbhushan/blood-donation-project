@@ -6,6 +6,7 @@ import com.hemo.backend.dto.BloodBankDTO;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -59,8 +60,8 @@ public class BloodBankService {
             String queryBody = String.format(Locale.US, NEAREST_BANKS_QUERY_TEMPLATE, optionalFilters, userLatitude, userLongitude);
             EsSearchResponse response = elasticsearchClient.post()
                 .uri("/bb_inventory_current/_search")
-                .contentType(MediaType.APPLICATION_JSON)
-                .body(queryBody)
+                .contentType(Objects.requireNonNull(MediaType.APPLICATION_JSON))
+                .body(Objects.requireNonNull(queryBody))
                 .retrieve()
                 .body(EsSearchResponse.class);
 

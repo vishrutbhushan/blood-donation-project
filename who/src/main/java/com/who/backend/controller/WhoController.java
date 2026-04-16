@@ -22,15 +22,17 @@ public class WhoController {
 
     @GetMapping("/api/who/blood-banks")
     public List<WhoBloodBankDTO> getBloodBanks() {
+        log.info("api.enter who.blood-banks");
         List<WhoBloodBankDTO> banks = repo.fetchAllBloodBanks();
-        log.info("who blood-banks fetched count={}", banks.size());
+        log.info("api.exit who.blood-banks count={}", banks.size());
         return banks;
     }
 
     @GetMapping("/api/who/blood-banks/incremental")
     public List<WhoBloodBankDTO> getBloodBanksIncremental(@RequestParam long since) {
+        log.info("api.enter who.blood-banks.incremental since={}", since);
         List<WhoBloodBankDTO> banks = repo.fetchBloodBanksSince(since);
-        log.info("who blood-banks incremental since={} count={}", since, banks.size());
+        log.info("api.exit who.blood-banks.incremental count={}", banks.size());
         return banks;
     }
 
@@ -39,15 +41,17 @@ public class WhoController {
             @RequestParam(required = false) String bloodGroup,
             @RequestParam(required = false) String pincode,
             @RequestParam(defaultValue = "200") int limit) {
+        log.info("api.enter who.donors bloodGroup={} pincode={} limit={}", bloodGroup, pincode, limit);
         List<WhoDonorDTO> donors = repo.fetchDonorsFiltered(bloodGroup, pincode, limit);
-        log.info("who donors fetched bloodGroup={} pincode={} limit={} count={}", bloodGroup, pincode, limit, donors.size());
+        log.info("api.exit who.donors count={}", donors.size());
         return donors;
     }
 
     @GetMapping("/api/who/donors/incremental")
     public List<WhoDonorDTO> getDonorsIncremental(@RequestParam long since) {
+        log.info("api.enter who.donors.incremental since={}", since);
         List<WhoDonorDTO> donors = repo.fetchDonorsSince(since);
-        log.info("who donors incremental since={} count={}", since, donors.size());
+        log.info("api.exit who.donors.incremental count={}", donors.size());
         return donors;
     }
 
@@ -55,8 +59,15 @@ public class WhoController {
     public WhoIncrementalResponseDTO etlIncremental(
             @RequestParam long since,
             @RequestParam long until) {
-        WhoIncrementalResponseDTO response = new WhoIncrementalResponseDTO(repo.fetchEtlBanks(since, until), repo.fetchEtlDonors(since, until));
-        log.info("who etl incremental since={} until={} banks={} donors={}", since, until, response.getBlood_banks().size(), response.getDonors().size());
+        log.info("api.enter who.incremental since={} until={}", since, until);
+        WhoIncrementalResponseDTO response = new WhoIncrementalResponseDTO(
+            repo.fetchEtlBanks(since, until),
+            repo.fetchEtlDonors(since, until),
+            repo.fetchEtlInventoryTransactions(since, until));
+        log.info("api.exit who.incremental banks={} donors={} inventoryTxns={}",
+            response.getBlood_banks().size(),
+            response.getDonors().size(),
+            response.getInventory_transactions().size());
         return response;
     }
 }

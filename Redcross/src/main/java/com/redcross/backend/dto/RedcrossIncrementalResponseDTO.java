@@ -11,4 +11,5 @@ import lombok.NoArgsConstructor;
 public class RedcrossIncrementalResponseDTO {
     private List<RedcrossEtlBankDTO> centres;
     private List<RedcrossEtlDonorDTO> people;
+    private List<RedcrossEtlInventoryTransactionDTO> inventory_transactions;
 }

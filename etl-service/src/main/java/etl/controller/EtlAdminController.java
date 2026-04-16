@@ -1,6 +1,6 @@
 package etl.controller;
 
-import etl.App;
+import etl.service.EtlPipelineService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -11,17 +11,17 @@ import lombok.extern.slf4j.Slf4j;
 @RequestMapping("/admin/etl")
 @Slf4j
 public class EtlAdminController {
-    private final App app;
+    private final EtlPipelineService pipelineService;
 
-    public EtlAdminController(App app) {
-        this.app = app;
+    public EtlAdminController(EtlPipelineService pipelineService) {
+        this.pipelineService = pipelineService;
     }
 
     @GetMapping("/bulk-load")
     public ResponseEntity<String> triggerBulkLoad() {
-        log.info("etl bulk-load trigger requested");
-        String result = app.startBulkLoad();
-        log.info("etl bulk-load trigger result={}", result);
+        log.info("api.enter etl.bulk-load");
+        String result = pipelineService.startInitialBulkLoad();
+        log.info("api.exit etl.bulk-load result={}", result);
         return ResponseEntity.accepted().body(result);
     }
 }

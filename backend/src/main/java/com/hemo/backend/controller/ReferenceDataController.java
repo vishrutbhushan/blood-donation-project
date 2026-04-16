@@ -17,8 +17,9 @@ public class ReferenceDataController {
 
     @GetMapping
     public ReferenceDataDTO getReferenceData() {
+        log.info("api.enter reference-data.get");
         ReferenceDataDTO response = referenceDataService.getReferenceData();
-        log.info("reference data loaded bloodGroups={} bloodComponents={}", response.getBloodGroups().size(), response.getBloodComponents().size());
+        log.info("api.exit reference-data.get bloodGroups={} bloodComponents={}", response.getBloodGroups().size(), response.getBloodComponents().size());
         return response;
     }
 }

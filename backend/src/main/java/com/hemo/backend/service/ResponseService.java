@@ -9,6 +9,7 @@ import com.hemo.backend.repository.RequestRepository;
 import com.hemo.backend.repository.ResponseRepository;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Objects;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -23,7 +24,8 @@ public class ResponseService {
 
     @Transactional
     public ResponseRecordDTO addResponse(Long requestId, ResponseDTO dto) {
-        Request request = requestRepository.findById(requestId)
+        Long safeRequestId = Objects.requireNonNull(requestId, "requestId");
+        Request request = requestRepository.findById(safeRequestId)
                 .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, "Request not found"));
 
         Response response = new Response();

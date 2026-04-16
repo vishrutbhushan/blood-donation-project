@@ -147,3 +147,66 @@ SECTION C - OPERATIONAL VALIDATION CHECKLIST (CURRENT)
 9. Validate backend donor search from CSV-driven test combinations
 10. Validate Grafana login and datasource presence (Elasticsearch + ClickHouse)
 11. Validate OTP behavior: correct 123456 works, wrong OTP returns 401 Invalid OTP
+
+
+SECTION D - ENHANCEMENTS (TRANSACTION INVENTORY + DAILY ANALYTICS)
+
+FR-17 Analytics Cadence
+1. Operational search projections may update frequently in Elasticsearch.
+2. Analytics warehouse load to ClickHouse must run once daily.
+3. Default daily analytics schedule is 00:10 Asia/Kolkata.
+
+FR-18 Inventory Transaction Model
+1. Source inventory data must be transaction-level, not snapshot-level.
+2. Each inventory transaction must include:
+   a. inflow/outflow/adjustment type
+   b. event timestamp
+   c. blood group
+   d. blood component
+   e. blood bank foreign key
+   f. optional donor foreign key
+   g. optional expiry date
+   h. quantity delta in units
+   i. running balance after transaction
+3. Transaction records are immutable; corrections are new adjustment transactions.
+
+FR-19 Day-Level Warehouse Facts
+1. ClickHouse analytical inventory facts must be stored at day grain.
+2. Daily inventory fact must include:
+   a. opening balance units
+   b. inflow units
+   c. outflow units
+   d. adjustment units
+   e. closing balance units
+   f. donation and withdrawal event counts
+3. Daily donor fact must include donor activity and eligibility metrics.
+
+FR-20 Historical KPI Coverage
+1. System must answer historical analytics such as:
+   a. total donations in a month (example: April)
+   b. opening balance for a month
+   c. closing balance for a month
+2. Week, month, quarter, and year analytics must be derived from day-level facts.
+
+TC-09 Analytics Update Constraint
+1. ClickHouse analytical tables must not receive high-frequency operational updates.
+2. Analytical facts are refreshed only by scheduled daily analytics pipeline runs.
+
+TC-10 Aggregation Ownership
+1. Source systems provide raw transaction events.
+2. ETL moves normalized transaction events.
+3. ClickHouse owns day-level and larger-period analytical aggregation.
+
+TC-11 Warehouse Fact Immutability
+1. Raw transaction facts are append-only.
+2. Reprocessing and reruns must remain idempotent by deterministic business keys.
+
+SECTION E - OPERATIONAL VALIDATION CHECKLIST (ENHANCEMENTS)
+
+1. Verify source schemas contain transaction-level inventory table definitions.
+2. Seed deterministic transaction data and regenerate CSV preview.
+3. Validate ETL incremental updates Elasticsearch current donor and blood-bank projections.
+4. Validate daily analytics schedule executes at 00:10 Asia/Kolkata.
+5. Validate ClickHouse day-grain inventory facts have unique key dimensions per day.
+6. Validate opening and closing balances across consecutive days.
+7. Validate April KPI queries (total donations, opening, closing) are deterministic.

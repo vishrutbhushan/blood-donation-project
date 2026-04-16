@@ -18,8 +18,9 @@ public class SearchController {
     @PostMapping("/{userId}")
     public SearchResponseDTO createSearch(@PathVariable Long userId,
                               @RequestBody SearchCreateRequestDTO payload) {
+        log.info("api.enter searches.create userId={}", userId);
         SearchResponseDTO response = searchService.createSearch(userId, payload);
-        log.info("search created userId={} searchId={}", userId, response.getSearchId());
+        log.info("api.exit searches.create searchId={}", response.getSearchId());
         return response;
     }
 }

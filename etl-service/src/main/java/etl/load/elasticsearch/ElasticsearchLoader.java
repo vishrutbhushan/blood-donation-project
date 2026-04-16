@@ -3,12 +3,16 @@ package etl.load.elasticsearch;
 import etl.constants.Constants;
 import etl.model.BloodBank;
 import etl.model.Donor;
+import etl.model.InventoryTransaction;
 import etl.util.JsonUtil;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -85,47 +89,89 @@ public class ElasticsearchLoader {
 
     public ElasticsearchLoader(JsonUtil jsonUtil, RestClient.Builder builder) {
         this.jsonUtil = jsonUtil;
-        this.elastic = builder.baseUrl(Constants.ELASTIC_URL).build();
+        this.elastic = builder.baseUrl(Objects.requireNonNull(Constants.ELASTIC_URL, "ELASTIC_URL")).build();
     }
 
-    public void loadBanks(List<BloodBank> banks) {
+    public void loadBanks(List<BloodBank> banks, List<InventoryTransaction> currentInventoryState) {
         if (banks == null || banks.isEmpty()) {
             return;
         }
-        for (BloodBank b : banks) {
-            String id = sourceAwareId(b.getSource(), b.getBankId());
-            if (Constants.OP_DELETE.equalsIgnoreCase(str(b.getOp()))) {
-                elastic.delete().uri("/{index}/_doc/{id}", Constants.ELASTIC_INDEX_BANKS, id).retrieve().toBodilessEntity();
-            } else {
-                Map<String, Object> doc = new LinkedHashMap<>();
-                doc.put("source", str(b.getSource()));
-                doc.put("blood_bank_id", str(b.getBankId()));
-                doc.put("contact_number", str(b.getPhone()));
-                doc.put("blood_bank_name", str(b.getBankName()));
-                doc.put("source_record_id", str(b.getBankId()));
-                doc.put("event_time", isoDateTime(str(b.getUpdatedAt())));
-                doc.put("address", str(b.getAddress()));
-                doc.put("city", str(b.getCity()));
-                doc.put("state", str(b.getState()));
-                doc.put("pincode", str(b.getPincode()));
-                doc.put("category", str(b.getCategory()));
-                doc.put("email", str(b.getEmail()));
-                Map<String, Object> location = new LinkedHashMap<>();
-                location.put("lat", b.getLat() == null ? 0.0 : b.getLat());
-                location.put("lon", b.getLon() == null ? 0.0 : b.getLon());
-                doc.put("location", location);
-                doc.put("blood_group", "UNKNOWN");
-                doc.put("component", "UNKNOWN");
-                doc.put("units_available", 0);
 
+        Map<String, List<InventoryTransaction>> inventoryByBank = new HashMap<>();
+        if (currentInventoryState != null) {
+            for (InventoryTransaction txn : currentInventoryState) {
+                String source = str(txn.getSource());
+                String bankId = str(txn.getBankId());
+                if (source.isBlank() || bankId.isBlank()) {
+                    continue;
+                }
+                String key = sourceAwareId(source, bankId);
+                inventoryByBank.computeIfAbsent(key, k -> new ArrayList<>()).add(txn);
+            }
+        }
+
+        for (BloodBank b : banks) {
+            String bankKey = sourceAwareId(b.getSource(), b.getBankId());
+            if (Constants.OP_DELETE.equalsIgnoreCase(str(b.getOp()))) {
+                deleteBankInventoryDocs(b);
+                continue;
+            }
+
+            List<InventoryTransaction> bankInventory = inventoryByBank.getOrDefault(bankKey, List.of());
+            if (bankInventory.isEmpty()) {
+                Map<String, Object> doc = toBankInventoryDoc(b, "UNKNOWN", "UNKNOWN", 0, str(b.getUpdatedAt()));
                 elastic.post()
-                    .uri("/{index}/_doc/{id}", Constants.ELASTIC_INDEX_BANKS, id)
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .body(jsonUtil.toJson(doc))
+                    .uri("/{index}/_doc/{id}", Constants.ELASTIC_INDEX_BANKS, bankInventoryDocId(b.getSource(), b.getBankId(), "UNKNOWN", "UNKNOWN"))
+                    .contentType(Objects.requireNonNull(MediaType.APPLICATION_JSON))
+                    .body(Objects.requireNonNull(jsonUtil.toJson(doc)))
+                    .retrieve()
+                    .toBodilessEntity();
+                continue;
+            }
+
+            for (InventoryTransaction txn : bankInventory) {
+                String bloodGroup = str(txn.getBloodGroup());
+                String component = str(txn.getComponent());
+                int unitsAvailable = txn.getRunningBalanceAfter() == null ? 0 : txn.getRunningBalanceAfter();
+                String updatedAt = str(txn.getEventTimestamp()).isBlank() ? str(b.getUpdatedAt()) : str(txn.getEventTimestamp());
+
+                Map<String, Object> doc = toBankInventoryDoc(b, bloodGroup, component, unitsAvailable, updatedAt);
+                elastic.post()
+                    .uri("/{index}/_doc/{id}", Constants.ELASTIC_INDEX_BANKS, bankInventoryDocId(b.getSource(), b.getBankId(), bloodGroup, component))
+                    .contentType(Objects.requireNonNull(MediaType.APPLICATION_JSON))
+                    .body(Objects.requireNonNull(jsonUtil.toJson(doc)))
                     .retrieve()
                     .toBodilessEntity();
             }
         }
+    }
+
+    private Map<String, Object> toBankInventoryDoc(BloodBank bank, String bloodGroup, String component, int unitsAvailable, String updatedAt) {
+        Map<String, Object> doc = new LinkedHashMap<>();
+        doc.put("source", str(bank.getSource()));
+        doc.put("blood_bank_id", str(bank.getBankId()));
+        doc.put("contact_number", str(bank.getPhone()));
+        doc.put("blood_bank_name", str(bank.getBankName()));
+        doc.put("source_record_id", str(bank.getBankId()));
+        doc.put("event_time", isoDateTime(updatedAt));
+        doc.put("address", str(bank.getAddress()));
+        doc.put("city", str(bank.getCity()));
+        doc.put("state", str(bank.getState()));
+        doc.put("pincode", str(bank.getPincode()));
+        doc.put("category", str(bank.getCategory()));
+        doc.put("email", str(bank.getEmail()));
+        Map<String, Object> location = new LinkedHashMap<>();
+        location.put("lat", bank.getLat() == null ? 0.0 : bank.getLat());
+        location.put("lon", bank.getLon() == null ? 0.0 : bank.getLon());
+        doc.put("location", location);
+        doc.put("blood_group", bloodGroup);
+        doc.put("component", component);
+        doc.put("units_available", unitsAvailable);
+        return doc;
+    }
+
+    private String bankInventoryDocId(String source, String bankId, String bloodGroup, String component) {
+        return sourceAwareId(source, bankId) + ":" + str(bloodGroup).replace(" ", "_") + ":" + str(component).replace(" ", "_");
     }
 
     public void bootstrap() {
@@ -163,8 +209,8 @@ public class ElasticsearchLoader {
 
                 elastic.post()
                     .uri("/{index}/_doc/{id}", Constants.ELASTIC_INDEX_DONORS, id)
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .body(jsonUtil.toJson(doc))
+                    .contentType(Objects.requireNonNull(MediaType.APPLICATION_JSON))
+                    .body(Objects.requireNonNull(jsonUtil.toJson(doc)))
                     .retrieve()
                     .toBodilessEntity();
             }
@@ -175,11 +221,28 @@ public class ElasticsearchLoader {
         return str(source) + ":" + str(id);
     }
 
+    private void deleteBankInventoryDocs(BloodBank bank) {
+        String body = "{"
+            + "\"query\":{"
+            + "\"bool\":{"
+            + "\"filter\":["
+            + "{\"term\":{\"source\":\"" + escJson(str(bank.getSource())) + "\"}},"
+            + "{\"term\":{\"blood_bank_id\":\"" + escJson(str(bank.getBankId())) + "\"}}"
+            + "]}}}";
+
+        elastic.post()
+            .uri("/{index}/_delete_by_query?refresh=true", Constants.ELASTIC_INDEX_BANKS)
+            .contentType(Objects.requireNonNull(MediaType.APPLICATION_JSON))
+            .body(Objects.requireNonNull(body))
+            .retrieve()
+            .toBodilessEntity();
+    }
+
     private void putTemplate(String templateName, String body) {
         elastic.put()
             .uri("/_index_template/{name}", templateName)
-            .contentType(MediaType.APPLICATION_JSON)
-            .body(body)
+            .contentType(Objects.requireNonNull(MediaType.APPLICATION_JSON))
+            .body(Objects.requireNonNull(body))
             .retrieve()
             .toBodilessEntity();
     }
@@ -188,10 +251,14 @@ public class ElasticsearchLoader {
         try {
             elastic.delete().uri("/{index}", indexName).retrieve().toBodilessEntity();
         } catch (RestClientResponseException e) {
-            if (e.getRawStatusCode() != 404) {
+            if (e.getStatusCode().value() != 404) {
                 throw e;
             }
         }
+    }
+
+    private String escJson(String value) {
+        return value.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 
     private String isoDateTime(String storeDateTime) {

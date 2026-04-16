@@ -21,7 +21,6 @@ import hashlib
 import json
 import random
 import re
-import uuid
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
@@ -36,6 +35,9 @@ DONORS_PER_RUN = 100          # new donors to insert each invocation
 BATCH_SIZE     = 10_000       # rows per executemany batch (keeps memory bounded)
 CSV_PREVIEW_ROWS = 100        # overwrite a 100-row preview CSV on each run
 CSV_PREVIEW_PATH = Path(__file__).resolve().with_name("generated_seed_preview.csv")
+RANDOM_SEED = 42
+
+random.seed(RANDOM_SEED)
 
 CSV_PREVIEW_HEADERS = [
     "source",
@@ -439,8 +441,13 @@ def rnd_bank_created_at() -> datetime:
 
 
 def unique_id():
-    """Guaranteed-unique identifier — SHA-256 of a UUID4. Safe across unlimited re-runs."""
-    return hashlib.sha256(uuid.uuid4().bytes).hexdigest()
+    """Deterministic identifier for fresh-environment test runs."""
+    unique_id.counter += 1
+    payload = f"seed:{RANDOM_SEED}:{unique_id.counter}:{random.random():.12f}".encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
+unique_id.counter = 0
 
 
 def pick_city():
@@ -477,6 +484,96 @@ def inventory_qty(blood_group, component):
     if component in ("Platelets", "Cryoprecipitate"):
         return random.randint(0, max(1, base_max // 3))
     return random.randint(0, base_max)
+
+
+def expiry_days(component):
+    if component == "Platelets":
+        return 5
+    if component in ("Whole Blood", "Packed RBC"):
+        return 42
+    if component in ("Fresh Frozen Plasma", "Plasma"):
+        return 365
+    if component == "Cryoprecipitate":
+        return 365
+    return 30
+
+
+def make_source_event_id(source, bb_id, blood_group, component, sequence, event_timestamp, txn_type):
+    raw = f"{source}:{bb_id}:{blood_group}:{component}:{sequence}:{event_timestamp.isoformat()}:{txn_type}"
+    digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()[:32]
+    return f"{source}-{bb_id}-{sequence}-{digest}"
+
+
+def generate_inventory_transactions(source, bb_id, bank_created_at, components):
+    transactions = []
+    sequence = 0
+
+    for bg in BLOOD_GROUPS:
+        for component in components:
+            running_balance = max(0, inventory_qty(bg, component))
+            first_event = rnd_updated_at(bank_created_at)
+
+            sequence += 1
+            source_event_id = make_source_event_id(source, bb_id, bg, component, sequence, first_event, "INFLOW")
+            transactions.append({
+                "source_event_id": source_event_id,
+                "bb_id": bb_id,
+                "donor_id": None,
+                "blood_group": bg,
+                "component": component,
+                "transaction_type": "INFLOW",
+                "units_delta": running_balance,
+                "running_balance_after": running_balance,
+                "expiry_date": (first_event.date() + timedelta(days=expiry_days(component))),
+                "event_timestamp": first_event,
+                "updated_at": first_event,
+            })
+
+            daily_events = random.randint(3, 9)
+            event_times = sorted(rnd_updated_at(first_event) for _ in range(daily_events))
+
+            for event_time in event_times:
+                txn_type = random.choices(["INFLOW", "OUTFLOW", "ADJUSTMENT"], weights=[45, 45, 10], k=1)[0]
+                donor_id = None
+                expiry = None
+
+                if txn_type == "INFLOW":
+                    delta = random.randint(1, max(2, (running_balance // 2) + 1))
+                    donor_id = random.randint(1, max(1, DONORS_PER_RUN))
+                    expiry = event_time.date() + timedelta(days=expiry_days(component))
+                elif txn_type == "OUTFLOW":
+                    if running_balance <= 0:
+                        txn_type = "INFLOW"
+                        delta = random.randint(1, 3)
+                        donor_id = random.randint(1, max(1, DONORS_PER_RUN))
+                        expiry = event_time.date() + timedelta(days=expiry_days(component))
+                    else:
+                        delta = -random.randint(1, min(running_balance, max(1, running_balance // 2)))
+                else:
+                    raw_delta = random.randint(-3, 3)
+                    delta = raw_delta if raw_delta != 0 else 1
+                    if running_balance + delta < 0:
+                        delta = -running_balance
+
+                running_balance = max(0, running_balance + delta)
+                sequence += 1
+                source_event_id = make_source_event_id(source, bb_id, bg, component, sequence, event_time, txn_type)
+
+                transactions.append({
+                    "source_event_id": source_event_id,
+                    "bb_id": bb_id,
+                    "donor_id": donor_id,
+                    "blood_group": bg,
+                    "component": component,
+                    "transaction_type": txn_type,
+                    "units_delta": delta,
+                    "running_balance_after": running_balance,
+                    "expiry_date": expiry,
+                    "event_timestamp": event_time,
+                    "updated_at": event_time,
+                })
+
+    return transactions
 
 
 def full_name():
@@ -547,7 +644,7 @@ def write_preview_csv(preview_rows):
                     break
 
     take("blood_bank", 20)
-    take("blood_inventory", 40)
+    take("blood_inventory_transaction", 40)
     take("blood_donor", 40)
 
     if len(rows) < CSV_PREVIEW_ROWS:
@@ -573,7 +670,7 @@ def write_preview_csv(preview_rows):
 
 def seed_redcross(conn, preview_rows):
     cur = conn.cursor()
-    inv_rows = []
+    inventory_txn_rows = []
 
     print(f"[Red Cross] Inserting {BANKS_PER_RUN} new banks ...")
     for _ in range(BANKS_PER_RUN):
@@ -616,30 +713,46 @@ def seed_redcross(conn, preview_rows):
             updated_at=bank_uat,
         )
 
-        for bg in BLOOD_GROUPS:
-            for comp in REDCROSS_COMPONENTS:
-                qty = inventory_qty(bg, comp)
-                updated_at = rnd_updated_at(bank_cat)
-                inv_rows.append((bb_id, bg, comp, qty, updated_at))
-                preview_record(
-                    preview_rows,
-                    source="RedCross",
-                    entity_type="blood_inventory",
-                    bank_id=bb_id,
-                    record_id=f"{bb_id}:{bg}:{comp}",
-                    blood_group=bg,
-                    component=comp,
-                    quantity=qty,
-                    updated_at=updated_at,
-                )
+        for txn in generate_inventory_transactions("redcross", bb_id, bank_cat, REDCROSS_COMPONENTS):
+            inventory_txn_rows.append((
+                txn["source_event_id"],
+                txn["bb_id"],
+                txn["donor_id"],
+                txn["blood_group"],
+                txn["component"],
+                txn["transaction_type"],
+                txn["units_delta"],
+                txn["running_balance_after"],
+                txn["expiry_date"],
+                txn["event_timestamp"],
+                txn["updated_at"],
+            ))
+            preview_record(
+                preview_rows,
+                source="RedCross",
+                entity_type="blood_inventory_transaction",
+                bank_id=bb_id,
+                record_id=txn["source_event_id"],
+                blood_group=txn["blood_group"],
+                component=txn["component"],
+                quantity=txn["units_delta"],
+                units_available=txn["running_balance_after"],
+                event_time=txn["event_timestamp"],
+                updated_at=txn["updated_at"],
+                notes=txn["transaction_type"],
+            )
 
     execute_values(
         cur,
-        "INSERT INTO blood_inventory (bb_id, blood_group, component, quantity, updated_at) VALUES %s",
-        inv_rows,
+        """INSERT INTO blood_inventory_transaction
+           (source_event_id, bb_id, donor_id, blood_group, component,
+            transaction_type, units_delta, running_balance_after,
+            expiry_date, event_timestamp, updated_at)
+           VALUES %s""",
+        inventory_txn_rows,
     )
     conn.commit()
-    print(f"[Red Cross] {BANKS_PER_RUN} banks + {len(inv_rows)} inventory rows committed.")
+    print(f"[Red Cross] {BANKS_PER_RUN} banks + {len(inventory_txn_rows)} inventory transactions committed.")
 
     # Spread donors across ALL banks in the DB (including from prior runs)
     cur.execute("SELECT bb_id FROM blood_bank")
@@ -695,7 +808,7 @@ def seed_redcross(conn, preview_rows):
         print(f"  [Red Cross] donors: {inserted:,} / {DONORS_PER_RUN:,}", end="\r", flush=True)
 
     cur.close()
-    print(f"\n[Red Cross] Done — {BANKS_PER_RUN} new banks | {len(inv_rows)} inventory rows | {DONORS_PER_RUN:,} new donors")
+    print(f"\n[Red Cross] Done — {BANKS_PER_RUN} new banks | {len(inventory_txn_rows)} inventory transactions | {DONORS_PER_RUN:,} new donors")
 
 
 # ---------------------------------------------------------------------------
@@ -704,7 +817,7 @@ def seed_redcross(conn, preview_rows):
 
 def seed_who(conn, preview_rows):
     cur = conn.cursor()
-    inv_rows = []
+    inventory_txn_rows = []
 
     print(f"[WHO] Inserting {BANKS_PER_RUN} new banks ...")
     for _ in range(BANKS_PER_RUN):
@@ -747,31 +860,46 @@ def seed_who(conn, preview_rows):
             updated_at=bank_uat,
         )
 
-        for bg in BLOOD_GROUPS:
-            for comp in WHO_COMPONENTS:
-                qty = inventory_qty(bg, comp)
-                updated_at = rnd_updated_at(bank_cat)
-                inv_rows.append((bb_id, bg, comp, qty, updated_at))
-                preview_record(
-                    preview_rows,
-                    source="WHO",
-                    entity_type="blood_inventory",
-                    bank_id=bb_id,
-                    record_id=f"{bb_id}:{bg}:{comp}",
-                    blood_group=bg,
-                    component=comp,
-                    quantity=qty,
-                    units_available=qty,
-                    updated_at=updated_at,
-                )
+        for txn in generate_inventory_transactions("who", bb_id, bank_cat, WHO_COMPONENTS):
+            inventory_txn_rows.append((
+                txn["source_event_id"],
+                txn["bb_id"],
+                txn["donor_id"],
+                txn["blood_group"],
+                txn["component"],
+                txn["transaction_type"],
+                txn["units_delta"],
+                txn["running_balance_after"],
+                txn["expiry_date"],
+                txn["event_timestamp"],
+                txn["updated_at"],
+            ))
+            preview_record(
+                preview_rows,
+                source="WHO",
+                entity_type="blood_inventory_transaction",
+                bank_id=bb_id,
+                record_id=txn["source_event_id"],
+                blood_group=txn["blood_group"],
+                component=txn["component"],
+                quantity=txn["units_delta"],
+                units_available=txn["running_balance_after"],
+                event_time=txn["event_timestamp"],
+                updated_at=txn["updated_at"],
+                notes=txn["transaction_type"],
+            )
 
     execute_values(
         cur,
-        "INSERT INTO blood_inventory (bb_id, blood_group, component_type, units_available, last_updated) VALUES %s",
-        inv_rows,
+        """INSERT INTO blood_inventory_transaction
+           (source_event_id, bb_id, donor_id, blood_group, component,
+            transaction_type, units_delta, running_balance_after,
+            expiry_date, event_timestamp, updated_at)
+           VALUES %s""",
+        inventory_txn_rows,
     )
     conn.commit()
-    print(f"[WHO] {BANKS_PER_RUN} banks + {len(inv_rows)} inventory rows committed.")
+    print(f"[WHO] {BANKS_PER_RUN} banks + {len(inventory_txn_rows)} inventory transactions committed.")
 
     # Spread donors across ALL banks in the DB (including from prior runs)
     cur.execute("SELECT bb_id FROM blood_bank")
@@ -825,7 +953,7 @@ def seed_who(conn, preview_rows):
         print(f"  [WHO] donors: {inserted:,} / {DONORS_PER_RUN:,}", end="\r", flush=True)
 
     cur.close()
-    print(f"\n[WHO] Done — {BANKS_PER_RUN} new banks | {len(inv_rows)} inventory rows | {DONORS_PER_RUN:,} new donors")
+    print(f"\n[WHO] Done — {BANKS_PER_RUN} new banks | {len(inventory_txn_rows)} inventory transactions | {DONORS_PER_RUN:,} new donors")
 
 
 # ---------------------------------------------------------------------------

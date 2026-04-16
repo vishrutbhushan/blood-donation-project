@@ -4,6 +4,7 @@ import com.redcross.backend.dto.RedcrossCentreDTO;
 import com.redcross.backend.dto.RedcrossDonorDTO;
 import com.redcross.backend.dto.RedcrossEtlBankDTO;
 import com.redcross.backend.dto.RedcrossEtlDonorDTO;
+import com.redcross.backend.dto.RedcrossEtlInventoryTransactionDTO;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -36,16 +37,27 @@ public class RedcrossRepository {
         + "ORDER BY bb.bb_id";
 
     private static final String SQL_INVENTORY_ALL =
-        "SELECT bi.bb_id AS bb_id, bi.blood_group, bi.component, bi.quantity, "
-        + "(EXTRACT(EPOCH FROM bi.updated_at) * 1000)::bigint AS updated_at "
-        + "FROM blood_inventory bi ORDER BY bi.bb_id, bi.inventory_id";
+        "SELECT x.bb_id AS bb_id, x.blood_group, x.component, x.running_balance_after AS quantity, "
+        + "(EXTRACT(EPOCH FROM x.event_timestamp) * 1000)::bigint AS updated_at "
+        + "FROM ("
+        + "  SELECT DISTINCT ON (bi.bb_id, bi.blood_group, bi.component) "
+        + "         bi.bb_id, bi.blood_group, bi.component, bi.running_balance_after, bi.event_timestamp "
+        + "  FROM blood_inventory_transaction bi "
+        + "  ORDER BY bi.bb_id, bi.blood_group, bi.component, bi.event_timestamp DESC, bi.transaction_id DESC"
+        + ") x "
+        + "ORDER BY x.bb_id, x.blood_group, x.component";
 
     private static final String SQL_INVENTORY_SINCE =
-        "SELECT bi.bb_id AS bb_id, bi.blood_group, bi.component, bi.quantity, "
-        + "(EXTRACT(EPOCH FROM bi.updated_at) * 1000)::bigint AS updated_at "
-        + "FROM blood_inventory bi "
-        + "WHERE bi.bb_id IN (SELECT bb_id FROM blood_bank WHERE updated_at >= to_timestamp(? / 1000.0)) "
-        + "ORDER BY bi.bb_id, bi.inventory_id";
+        "SELECT x.bb_id AS bb_id, x.blood_group, x.component, x.running_balance_after AS quantity, "
+        + "(EXTRACT(EPOCH FROM x.event_timestamp) * 1000)::bigint AS updated_at "
+        + "FROM ("
+        + "  SELECT DISTINCT ON (bi.bb_id, bi.blood_group, bi.component) "
+        + "         bi.bb_id, bi.blood_group, bi.component, bi.running_balance_after, bi.event_timestamp "
+        + "  FROM blood_inventory_transaction bi "
+        + "  WHERE bi.event_timestamp >= to_timestamp(? / 1000.0) "
+        + "  ORDER BY bi.bb_id, bi.blood_group, bi.component, bi.event_timestamp DESC, bi.transaction_id DESC"
+        + ") x "
+        + "ORDER BY x.bb_id, x.blood_group, x.component";
 
     private static final String SQL_PEOPLE_ALL =
         "SELECT d.full_name, d.national_id, d.contact_number, d.address, d.blood_type, d.age, "
@@ -101,6 +113,17 @@ public class RedcrossRepository {
         + "WHERE d.updated_at >= to_timestamp(? / 1000.0) "
         + "AND d.updated_at < to_timestamp(? / 1000.0) "
         + "ORDER BY d.donor_id";
+
+    private static final String SQL_ETL_INVENTORY_TXN_RANGE =
+        "SELECT CAST(t.transaction_id AS text) AS transaction_id, t.source_event_id, CAST(t.bb_id AS text) AS bank_id, "
+        + "CAST(t.donor_id AS text) AS donor_id, t.blood_group, t.component, t.transaction_type, "
+        + "t.units_delta, t.running_balance_after, to_char(t.expiry_date, 'YYYY-MM-DD') AS expiry_date, "
+        + "to_char(t.event_timestamp, 'YYYY-MM-DD HH24:MI:SS') AS event_timestamp, "
+        + "to_char(t.updated_at, 'YYYY-MM-DD HH24:MI:SS') AS update_time, false AS deleted "
+        + "FROM blood_inventory_transaction t "
+        + "WHERE t.event_timestamp >= to_timestamp(? / 1000.0) "
+        + "AND t.event_timestamp < to_timestamp(? / 1000.0) "
+        + "ORDER BY t.transaction_id";
 
     private final JdbcTemplate jdbc;
 
@@ -196,6 +219,15 @@ public class RedcrossRepository {
                 BeanPropertyRowMapper.newInstance(RedcrossEtlDonorDTO.class));
     }
 
+    public List<RedcrossEtlInventoryTransactionDTO> fetchEtlInventoryTransactions(long since, long until) {
+        return jdbc.query(SQL_ETL_INVENTORY_TXN_RANGE,
+                ps -> {
+                    ps.setLong(1, since);
+                    ps.setLong(2, until);
+                },
+                BeanPropertyRowMapper.newInstance(RedcrossEtlInventoryTransactionDTO.class));
+    }
+
     private static class RedcrossCentreRowDTO extends RedcrossCentreDTO {
         private Long bb_id;
 
@@ -203,6 +235,7 @@ public class RedcrossRepository {
             return bb_id;
         }
 
+        @SuppressWarnings("unused")
         public void setBb_id(Long bb_id) {
             this.bb_id = bb_id;
         }
@@ -215,6 +248,7 @@ public class RedcrossRepository {
             return bb_id;
         }
 
+        @SuppressWarnings("unused")
         public void setBb_id(Long bb_id) {
             this.bb_id = bb_id;
         }

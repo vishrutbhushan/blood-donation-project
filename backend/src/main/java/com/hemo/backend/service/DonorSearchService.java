@@ -10,6 +10,7 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -104,8 +105,8 @@ public class DonorSearchService {
             String body = buildElasticsearchQuery(compatibleGroups, geoPoint, safeOffset, safeLimit);
             String json = elasticsearchClient.post()
                 .uri("/donor_availability_current/_search")
-                .contentType(MediaType.APPLICATION_JSON)
-                .body(body)
+                .contentType(Objects.requireNonNull(MediaType.APPLICATION_JSON))
+                .body(Objects.requireNonNull(body))
                 .retrieve()
                 .body(String.class);
 

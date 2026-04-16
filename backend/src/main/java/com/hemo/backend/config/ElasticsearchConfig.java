@@ -1,5 +1,6 @@
 package com.hemo.backend.config;
 
+import java.util.Objects;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -10,6 +11,6 @@ public class ElasticsearchConfig {
     @Bean
     RestClient elasticsearchRestClient(RestClient.Builder builder,
             @Value("${app.elasticsearch-url:http://elasticsearch:9200}") String elasticsearchUrl) {
-        return builder.baseUrl(elasticsearchUrl).build();
+        return builder.baseUrl(Objects.requireNonNull(elasticsearchUrl, "elasticsearchUrl")).build();
     }
 }

@@ -17,4 +17,7 @@ public class EtlBatch {
 
     @Builder.Default
     private List<Donor> donors = new ArrayList<>();
+
+    @Builder.Default
+    private List<InventoryTransaction> inventoryTransactions = new ArrayList<>();
 }

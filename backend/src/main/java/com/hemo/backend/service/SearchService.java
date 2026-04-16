@@ -8,6 +8,7 @@ import com.hemo.backend.exception.GlobalExceptionHandler.AppException;
 import com.hemo.backend.repository.RequestRepository;
 import com.hemo.backend.repository.SearchRepository;
 import com.hemo.backend.repository.UserRepository;
+import java.util.Objects;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -21,10 +22,11 @@ public class SearchService {
     private final RequestRepository requestRepository;
 
     public SearchResponseDTO createSearch(Long userId, SearchCreateRequestDTO payload) {
-        User user = userRepository.findById(userId)
+        Long safeUserId = Objects.requireNonNull(userId, "userId");
+        User user = userRepository.findById(safeUserId)
                 .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, "User not found"));
 
-        if (requestRepository.countActiveByUser(userId) > 0) {
+        if (requestRepository.countActiveByUser(safeUserId) > 0) {
             throw new AppException(HttpStatus.CONFLICT, "Active request exists");
         }
 

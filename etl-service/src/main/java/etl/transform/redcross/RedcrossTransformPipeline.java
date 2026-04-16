@@ -7,6 +7,7 @@ import etl.model.GeoPoint;
 import etl.model.BloodBank;
 import etl.model.Donor;
 import etl.model.EtlBatch;
+import etl.model.InventoryTransaction;
 import etl.util.PincodeGeoMap;
 import etl.util.TimeUtil;
 import java.util.ArrayList;
@@ -18,10 +19,12 @@ import org.springframework.stereotype.Component;
 public class RedcrossTransformPipeline {
     private static final String BANK_RECORD_KEY = "centres";
     private static final String DONOR_RECORD_KEY = "people";
+    private static final String INVENTORY_TXN_RECORD_KEY = "inventory_transactions";
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     private static final HashMap<String, String> BANK_FIELDS = new HashMap<>();
     private static final HashMap<String, String> DONOR_FIELDS = new HashMap<>();
+    private static final HashMap<String, String> INVENTORY_TXN_FIELDS = new HashMap<>();
 
     static {
         BANK_FIELDS.put("bank_id", "bank_id");
@@ -46,6 +49,19 @@ public class RedcrossTransformPipeline {
         DONOR_FIELDS.put("last_donated_on", "last_donated_on");
         DONOR_FIELDS.put("last_donated_blood_bank", "last_donated_blood_bank");
         DONOR_FIELDS.put("updated", "update_time");
+
+        INVENTORY_TXN_FIELDS.put("transaction_id", "transaction_id");
+        INVENTORY_TXN_FIELDS.put("source_event_id", "source_event_id");
+        INVENTORY_TXN_FIELDS.put("bank_id", "bank_id");
+        INVENTORY_TXN_FIELDS.put("donor_id", "donor_id");
+        INVENTORY_TXN_FIELDS.put("blood_group", "blood_group");
+        INVENTORY_TXN_FIELDS.put("component", "component");
+        INVENTORY_TXN_FIELDS.put("transaction_type", "transaction_type");
+        INVENTORY_TXN_FIELDS.put("units_delta", "units_delta");
+        INVENTORY_TXN_FIELDS.put("running_balance_after", "running_balance_after");
+        INVENTORY_TXN_FIELDS.put("expiry_date", "expiry_date");
+        INVENTORY_TXN_FIELDS.put("event_timestamp", "event_timestamp");
+        INVENTORY_TXN_FIELDS.put("updated", "update_time");
     }
 
     public EtlBatch run(Object payload, PincodeGeoMap geoMap) {
@@ -59,7 +75,44 @@ public class RedcrossTransformPipeline {
             Donor donor = toDonor(raw, geoMap);
             out.getDonors().add(donor);
         }
+        for (JsonNode raw : pickRecords(root, INVENTORY_TXN_RECORD_KEY)) {
+            InventoryTransaction transaction = toInventoryTransaction(raw);
+            out.getInventoryTransactions().add(transaction);
+        }
         return out;
+    }
+
+    private InventoryTransaction toInventoryTransaction(JsonNode raw) {
+        String transactionId = required(raw, INVENTORY_TXN_FIELDS.get("transaction_id"));
+        String sourceEventId = required(raw, INVENTORY_TXN_FIELDS.get("source_event_id"));
+        String bankId = required(raw, INVENTORY_TXN_FIELDS.get("bank_id"));
+        String bloodGroup = required(raw, INVENTORY_TXN_FIELDS.get("blood_group"));
+        String component = required(raw, INVENTORY_TXN_FIELDS.get("component"));
+        String transactionType = required(raw, INVENTORY_TXN_FIELDS.get("transaction_type"));
+        Integer unitsDelta = toInteger(raw.get(INVENTORY_TXN_FIELDS.get("units_delta")));
+        Integer runningBalanceAfter = toInteger(raw.get(INVENTORY_TXN_FIELDS.get("running_balance_after")));
+        String eventTimestamp = TimeUtil.formatStore(required(raw, INVENTORY_TXN_FIELDS.get("event_timestamp")));
+        String updatedAt = TimeUtil.formatStore(required(raw, INVENTORY_TXN_FIELDS.get("updated")));
+        if (unitsDelta == null || runningBalanceAfter == null) {
+            throw new RuntimeException("missing required inventory transaction numeric fields");
+        }
+        String op = truthy(raw.get("deleted")) || truthy(raw.get("is_deleted")) ? Constants.OP_DELETE : Constants.OP_UPSERT;
+        return InventoryTransaction.builder()
+                .source(Constants.SOURCE_REDCROSS)
+                .transactionId(transactionId)
+                .sourceEventId(sourceEventId)
+                .bankId(bankId)
+                .donorId(optional(raw, INVENTORY_TXN_FIELDS.get("donor_id")))
+                .bloodGroup(bloodGroup)
+                .component(component)
+                .transactionType(transactionType)
+                .unitsDelta(unitsDelta)
+                .runningBalanceAfter(runningBalanceAfter)
+                .expiryDate(optional(raw, INVENTORY_TXN_FIELDS.get("expiry_date")))
+                .eventTimestamp(eventTimestamp)
+                .updatedAt(updatedAt)
+                .op(op)
+                .build();
     }
 
     private BloodBank toBank(JsonNode raw, PincodeGeoMap geoMap) {

@@ -23,8 +23,10 @@ public class DonorSearchController {
             @RequestParam(required = false) String pincode,
             @RequestParam(defaultValue = "0") int offset,
             @RequestParam(defaultValue = "200") int limit) {
+        log.info("api.enter donors.search bloodGroup={} pincode={} offset={} limit={}", bloodGroup, pincode, offset, limit);
         DonorSearchResponseDTO response = donorSearchService.searchCompatibleDonors(bloodGroup, pincode, offset, limit);
-        log.info("donor search bloodGroup={} pincode={} offset={} limit={} matched={}", bloodGroup, pincode, offset, limit, response.getTotalMatched());
-        return donorSearchService.toSummaryDTO(response);
+        DonorSearchSummaryDTO summary = donorSearchService.toSummaryDTO(response);
+        log.info("api.exit donors.search matched={}", summary.getTotalMatched());
+        return summary;
     }
 }

@@ -11,4 +11,5 @@ import lombok.NoArgsConstructor;
 public class WhoIncrementalResponseDTO {
     private List<WhoEtlBankDTO> blood_banks;
     private List<WhoEtlDonorDTO> donors;
+    private List<WhoEtlInventoryTransactionDTO> inventory_transactions;
 }

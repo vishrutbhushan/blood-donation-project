@@ -18,8 +18,9 @@ public class UserController {
 
     @PostMapping("/get-or-create")
     public User getOrCreateUser(@Valid @RequestBody UserDTO dto) {
+        log.info("api.enter users.get-or-create abhaId={}", dto.getAbhaId());
         User user = userService.getOrCreateByAbha(dto.getAbhaId());
-        log.info("users get-or-create resolved userId={}", user.getUserId());
+        log.info("api.exit users.get-or-create userId={}", user.getUserId());
         return user;
     }
 }

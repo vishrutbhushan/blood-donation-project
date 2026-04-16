@@ -23,20 +23,24 @@ public class AuthController {
 
     @PostMapping("/send-otp")
     public OtpSendResponseDTO sendOtp(@Valid @RequestBody OtpSendRequestDTO dto) {
+        log.info("api.enter auth.send-otp abhaId={}", dto.getAbhaId());
         AuthProfileDTO profile = profileFromAbha(dto.getAbhaId());
-        log.info("auth send-otp requested");
-        return new OtpSendResponseDTO(true, dto.getAbhaId(), profile.getName(), profile.getPhone());
+        OtpSendResponseDTO response = new OtpSendResponseDTO(true, dto.getAbhaId(), profile.getName(), profile.getPhone());
+        log.info("api.exit auth.send-otp sent={}", response.isSent());
+        return response;
     }
 
     @PostMapping("/verify-otp")
     public OtpVerifyResponseDTO verifyOtp(@Valid @RequestBody OtpVerifyRequestDTO dto) {
+        log.info("api.enter auth.verify-otp abhaId={}", dto.getAbhaId());
         if (!HARDCODED_OTP.equals(dto.getOtp())) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid OTP");
         }
 
         AuthProfileDTO profile = profileFromAbha(dto.getAbhaId());
-        log.info("auth verify-otp succeeded");
-        return new OtpVerifyResponseDTO(true, dto.getAbhaId(), profile.getName(), profile.getPhone());
+        OtpVerifyResponseDTO response = new OtpVerifyResponseDTO(true, dto.getAbhaId(), profile.getName(), profile.getPhone());
+        log.info("api.exit auth.verify-otp verified={}", response.isVerified());
+        return response;
     }
 
     private AuthProfileDTO profileFromAbha(String abhaId) {
