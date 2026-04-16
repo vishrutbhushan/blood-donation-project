@@ -1,142 +1,154 @@
 # Blood Donation Project Stack
 
-This repository contains a Docker Compose-based stack for the blood donation project. The stack is split into application services, relational databases, search/analytics services, and a static frontend.
+This repository contains a Docker Compose based blood donation platform with four functional zones:
 
-## Scaling Model
+- Source systems: WHO and Redcross services with their own PostgreSQL databases
+- Core app: backend API + frontend web app
+- ETL: source-to-search-and-analytics data movement
+- Analytics: Elasticsearch, ClickHouse, and Grafana
 
-The stack uses service-level horizontal scaling where it makes sense:
+## Current Design
 
-- In single-node mode, Elasticsearch and ClickHouse run as single instances.
-- In full mode, Elasticsearch runs as a 3-node cluster for search and index availability.
-- In full mode, ClickHouse runs as a 3-node cluster for analytics storage and distributed reads.
-- In full mode, PostgreSQL adds a streaming read replica (`postgres-replica`) to the primary.
-- The Redcross and WHO databases run as separate PostgreSQL instances.
-- Backend services, Grafana, and the frontend remain single instances in the current setup.
+- WHO and Redcross are external-style source providers for ETL consumption only.
+- ETL bulk load is manual and async via `GET /admin/etl/bulk-load` on port `8083`.
+- ETL incremental is scheduler-driven and gated by bulk completion state.
+- Elasticsearch is the operational query store for blood-bank and donor search.
+- ClickHouse is the analytics store (daily facts + ingestion facts).
+- Backend remains the API boundary for frontend business workflows.
 
-This is infrastructure scaling, not application-level sharding. No business logic is embedded in the stack definition.
+## Runtime Topology
+
+Core services and local ports:
+
+- Backend: `http://localhost:8080`
+- Redcross source: `http://localhost:8081`
+- WHO source: `http://localhost:8082`
+- ETL admin: `http://localhost:8083`
+- Grafana: `http://localhost:3000`
+- Frontend: `http://localhost:3001`
+
+Databases and engines:
+
+- Primary PostgreSQL: `localhost:5432`
+- Read replica PostgreSQL (full profile): `localhost:5433`
+- Redcross PostgreSQL: `localhost:5434`
+- WHO PostgreSQL: `localhost:5435`
+- Elasticsearch: internal container network
+- ClickHouse: internal container network
 
 ## Startup Modes
 
-One Docker Compose file drives both modes:
+- Single mode: `SINGLE_MODE=true`
+- Full mode: `SINGLE_MODE=false` with `--profile full`
 
-- `docker-compose.yml` is the only stack definition.
-- `SINGLE_MODE=true` in [`.env`](.env) starts the lightweight 1-node mode.
-- `SINGLE_MODE=false` plus the `full` profile starts the 3-node Elasticsearch and ClickHouse setup with the PostgreSQL read replica.
-
-Run either mode directly from the terminal:
+PowerShell examples:
 
 ```powershell
+# Single mode
+$env:SINGLE_MODE = "true"
+docker compose up -d --build
 
-# Build once (sufficient for both modes)
-docker compose build
+# Full mode
+$env:SINGLE_MODE = "false"
+docker compose --profile full up -d --build
 
-$env:SINGLE_MODE="true"; 
-
-# Single-node mode: build
-docker compose build
-
-# Single-node mode: start
-docker compose up -d
-
-# Single-node mode: remove containers and network
-docker compose down --remove-orphans
-
-
-$env:SINGLE_MODE="false"; 
-
-# Full cluster mode: build
-docker compose --profile full build
-
-# Full cluster mode: start
-docker compose --profile full up -d
-
-# Full cluster mode: remove containers and network
-docker compose --profile full down --remove-orphans
-
-# Remove stack and ALL project volumes (use when you want a clean reset)
+# Clean reset (volumes included)
 docker compose --profile full down -v --remove-orphans
 ```
 
-Windows cmd equivalents:
+Cmd examples:
 
 ```cmd
-set SINGLE_MODE=true && docker compose up -d
-set SINGLE_MODE=false && docker compose --profile full up -d
+set SINGLE_MODE=true && docker compose up -d --build
+set SINGLE_MODE=false && docker compose --profile full up -d --build
 docker compose --profile full down -v --remove-orphans
 ```
 
-Important when switching between single mode and full mode:
+## API Routes
 
-- Run `docker compose --profile full down -v --remove-orphans` before starting in the other mode.
-- Elasticsearch persists cluster voting metadata in volumes; reusing old volumes across modes can prevent startup.
+Frontend-facing API routes (through Nginx proxy):
 
-## Communication Flow
+- `/api/backend/reference-data`
+- `/api/backend/auth/send-otp`
+- `/api/backend/auth/verify-otp`
+- `/api/backend/users/get-or-create`
+- `/api/backend/blood-banks/search`
+- `/api/backend/donors/search`
+- `/api/backend/searches/{userId}`
+- `/api/backend/requests/{searchId}`
+- `/api/backend/requests/{requestId}/re-request`
+- `/api/backend/requests/{requestId}/re-request-preview`
+- `/api/backend/requests/{requestId}/dispatch-next`
+- `/api/backend/requests/user/{userId}`
+- `/api/backend/requests/user/{userId}/responses`
+- `/api/backend/requests/user/{userId}/active`
 
-Services communicate directly over the Docker Compose network using service names:
+Direct backend controller base routes:
 
-- The backend connects to `postgres-primary` and `elasticsearch`.
-- The Redcross service connects to `redcross-db`.
-- The WHO service connects to `who-db`.
-- Grafana connects to Elasticsearch and ClickHouse through provisioned datasources.
-- The ETL service, when run, talks to the source services and pushes data to ClickHouse and Elasticsearch.
-- The ETL service does not start bulk loading automatically. Call `GET http://localhost:8083/admin/etl/bulk-load` to trigger the bulk load manually, then incremental runs become eligible.
-- Set `ETL_INCREMENTAL_INTERVAL_MS` in [`.env`](.env) to change how often incremental ETL runs. The default is `300000` ms, which is 5 minutes.
+- `/reference-data`
+- `/auth/*`
+- `/users/*`
+- `/blood-banks/*`
+- `/donors/*`
+- `/searches/*`
+- `/requests/*`
+- `/responses/*`
 
-The Spring Boot services resolve database and search settings from environment variables through their application property files. The ETL service reads its runtime URLs and credentials from environment variables directly, which are still provided by the shared `.env` file.
+Source-system routes (ETL-facing):
 
-For local host access, the application and PostgreSQL services are published on ports such as `8080`, `8081`, `8082`, `3000`, `3001`, `5432`, `5433`, `5434`, and `5435`. Elasticsearch and ClickHouse are internal-only.
+- Redcross: `/api/redcross/centres`, `/api/redcross/centres/incremental`, `/api/redcross/people`, `/api/redcross/people/incremental`, `/incremental`
+- WHO: `/api/who/blood-banks`, `/api/who/blood-banks/incremental`, `/api/who/donors`, `/api/who/donors/incremental`, `/incremental`
 
-## Runbook
+ETL admin route:
 
-Use this order when you want to exercise the full flow end to end:
+- `GET /admin/etl/bulk-load` (returns accepted response body with status text)
 
-1. Start the stack with `docker compose up -d --build`.
-2. Generate dummy source data and refresh the CSV preview with `python db-seeder/seed.py`.
-3. Trigger the ETL bulk load manually with `GET http://localhost:8083/admin/etl/bulk-load`.
-4. Open the frontend at `http://localhost:3001`.
-5. Use the blood-bank tab for anonymous search.
-6. Use the donor tab for the authenticated donor flow.
-7. Open Grafana at `http://localhost:3000`.
+## ETL Schedule
 
-Trigger endpoints used by the UI and services:
+- Bulk load is manual trigger only.
+- Incremental scheduler is cron-based:
+	- Env key: `ETL_INCREMENTAL_CRON`
+	- Default: `0 0 0 * * *` (00:00 Asia/Kolkata)
+	- Time zone key: `ETL_INCREMENTAL_ZONE` (default `Asia/Kolkata`)
 
-- `GET /api/backend/reference-data` - blood group and component options for the UI.
-- `POST /api/backend/auth/send-otp` - start donor login.
-- `POST /api/backend/auth/verify-otp` - verify donor login.
-- `POST /api/backend/users/get-or-create` - create or resolve the donor user.
-- `GET /api/backend/blood-banks/search?pincode={pincode}` - blood bank list served by backend from Elasticsearch data.
-- `GET /api/backend/donors/search` - donor search backed by Elasticsearch.
-- `POST /api/backend/searches/{userId}` - create a search record.
-- `POST /api/backend/requests/{searchId}` - create a request from a search.
-- `POST /api/backend/requests/{requestId}/re-request` - create a follow-up request.
-- `POST /api/backend/requests/{requestId}/dispatch-next` - notify the next 20 donors.
-- `GET /api/backend/requests/user/{userId}` - fetch a user’s requests.
-- `GET /api/backend/requests/user/{userId}/responses` - fetch donor responses.
-- `GET /api/backend/requests/user/{userId}/active` - check for an active request.
+Note: legacy `ETL_INCREMENTAL_INTERVAL_MS` exists in `.env` but current scheduler uses cron settings.
 
-## Proxies
+## Data and Schemas
 
-The frontend container uses Nginx as a lightweight reverse proxy for the API routes.
+Schema source files:
 
-- The frontend is published on port `3001` and serves the compiled UI from `frontend/`.
-- Nginx forwards `/api/backend` to the backend service by Docker DNS name.
-- WHO and Redcross endpoints are used by ETL as simulated external source systems, not by frontend or backend request flows.
-- Containers still talk to each other directly by service name inside the Compose network.
-- The ETL service should use Docker service DNS names when it runs in the stack network.
+- `backend/src/main/resources/schema.sql`
+- `Redcross/src/main/resources/sourcetables.sql`
+- `who/src/main/resources/source_coder.sql`
+- `Clickhouse/resources/schema_clickhouse.sql`
 
-## Where Data Lives
+Table inventory summary:
 
-- `postgres-primary`: main blood bank application data, initialized from `backend/src/main/resources/schema.sql`.
-- `postgres-replica`: streaming replica of `postgres-primary` for read-scaling and replication topology.
-- `redcross-db`: Redcross source data, initialized from `Redcross/src/main/resources/sourcetables.sql`.
-- `who-db`: WHO source data, initialized from `who/src/main/resources/source_coder.sql`.
-- `elasticsearch`: indexed search documents for blood banks and donors.
-- `clickhouse`: analytics tables in the `blood_ops` database.
-- `grafana`: dashboards and local state in the Grafana named volume.
-- `frontend`: static assets baked into the image, with no persistent application data.
+- Primary PostgreSQL: `users`, `searches`, `requests`, `responses`, `blood_group_lookup`, `blood_component_lookup`
+- Redcross PostgreSQL: `blood_bank`, `blood_inventory_transaction`, `blood_donor`
+- WHO PostgreSQL: `blood_bank`, `blood_inventory_transaction`, `blood_donor`
+- ClickHouse (`blood_ops`): `dim_source`, `dim_blood_group`, `dim_component`, `dim_location`, `dim_blood_bank`, `dim_donor`, `dim_date`, `dim_time`, `fact_inventory_transaction`, `fact_inventory_day`, `fact_donor_snapshot`, `fact_donor_day`, `fact_ingestion_event`, `source_ingestion_hourly_agg`
+
+Full table/column simple list is maintained in `SOURCE_OF_TRUTH.txt` (Section F).
+
+## E2E Runbook
+
+1. Start stack: `docker compose up -d --build`
+2. Confirm health: `docker compose ps`
+3. Seed source data: `python db-seeder/seed.py`
+4. Trigger ETL bulk: `GET http://localhost:8083/admin/etl/bulk-load`
+5. Validate backend APIs (`reference-data`, blood-bank search, donor search)
+6. Validate frontend flow at `http://localhost:3001`
+7. Validate Grafana login and datasource query execution at `http://localhost:3000`
+
+## Proxy Behavior
+
+- Frontend serves static assets on port `3001`.
+- Nginx maps `/api/backend/*` to backend service `http://backend:8080/*`.
+- ETL talks directly to WHO/Redcross by container DNS names.
 
 ## Notes
 
-- Elasticsearch template JSON files remain in `elastic search/resources/` for later alignment with index naming.
-- The Elasticsearch init container was removed from Compose because template loading is not required for the cluster to start.
-- The current stack is intentionally minimal and focused on infrastructure wiring rather than feature logic.
+- Keep controller logging in `api.enter` and `api.exit` format.
+- Keep API DTO contracts typed (no map-based public payloads).
+- Keep ETL orchestration in service classes; keep application entrypoint minimal.

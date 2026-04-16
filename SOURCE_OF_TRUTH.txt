@@ -1,212 +1,178 @@
 BLOOD DONATION PLATFORM - SOURCE OF TRUTH
 
 Purpose:
-This document defines the required functional behavior (FRs) and the mandatory technical constraints/restrictions for the project.
+This document defines the current functional behavior and technical constraints for the live design in this repository.
 
 
-SECTION A - FUNCTIONAL REQUIREMENTS (FR)
+SECTION A - CURRENT FUNCTIONAL REQUIREMENTS
 
 FR-01 System Boundaries
 1. WHO and Redcross are simulated external source systems.
-2. ETL is the only component allowed to consume WHO and Redcross APIs.
-3. Backend and frontend user flows must not directly depend on WHO/Redcross APIs.
+2. ETL is the only component allowed to consume WHO and Redcross APIs for ingestion.
+3. Frontend and backend business workflows must not depend directly on WHO or Redcross APIs.
 
 FR-02 Data Provisioning
-1. Seeder must generate deterministic dummy source-style data.
-2. Seeder must overwrite and regenerate a CSV preview file for test validation.
+1. Seeder generates deterministic dummy source-style data.
+2. Seeder overwrites and regenerates `db-seeder/generated_seed_preview.csv` each run.
 
 FR-03 ETL Bulk Load
-1. ETL bulk load is manually triggered (not automatic at startup).
-2. ETL bulk load must ingest both blood bank and donor datasets.
-3. ETL must normalize and write data into Elasticsearch and ClickHouse.
-4. Re-triggering completed bulk load must be idempotent.
+1. Bulk load is manual (not automatic at ETL startup).
+2. Bulk load trigger endpoint is `GET /admin/etl/bulk-load` on ETL service.
+3. Bulk load starts async and returns accepted response text.
+4. Re-trigger after completion must be idempotent (`bulk load already completed`).
 
-FR-04 ETL Incremental Load
-1. ETL incremental sync runs on schedule after bulk completion.
-2. Incremental sync fetches only changed records from source systems.
-3. Incremental sync upserts updates into Elasticsearch and ClickHouse.
+FR-04 ETL Incremental
+1. Incremental ETL runs by cron scheduler.
+2. Default schedule is `0 0 0 * * *` in `Asia/Kolkata`.
+3. Incremental runs only after bulk completion state is true.
+4. Incremental updates operational projections and analytics facts through ETL pipeline processing.
 
 FR-05 Blood Bank Search (Anonymous)
-1. Blood-bank search must be usable without donor login.
-2. Backend must support pincode-driven nearest blood bank lookup.
-3. Query behavior must use geo-distance and return nearest 20 records max.
-4. UI must display search results from backend APIs only.
+1. Blood-bank search is available without donor login.
+2. Backend supports pincode-driven nearest lookup.
+3. Query behavior uses geo-distance sorting and practical result limiting.
 
-FR-06 Donor Login
-1. Donor tab is visible/usable only for logged-in donors.
-2. Current local OTP behavior is deterministic and hardcoded.
-3. On successful OTP verification, user identity is resolved/created in backend.
+FR-06 Donor Login and Auth Gating
+1. Donor actions are gated behind OTP flow.
+2. Local OTP behavior is deterministic (`123456`).
+3. On successful OTP verification, user identity is resolved or created in backend.
 
 FR-07 Donor Search (Authenticated)
-1. Donor search requires authenticated donor context.
-2. Donor matching uses blood group and pincode with geo-aware querying.
-3. UI must not reveal donor personal details during search stage.
-4. UI must display counts by distance buckets:
-   a. Less than 10 km
-   b. Less than 50 km
-   c. Greater than 50 km
+1. Donor search requires authenticated user context in UI flow.
+2. Matching uses blood group compatibility and geo-aware search.
+3. UI displays aggregate distance bucket counts.
 
-FR-08 Request Creation
-1. User can create a blood request from donor search context.
-2. Search context must be persisted.
-3. Initial dispatch targets nearest 20 eligible donors.
-4. Contacted donor entries are persisted for tracking.
-5. Donor personal details remain hidden to requester unless donor has responded.
+FR-08 Request Lifecycle
+1. User can create request from donor search context.
+2. User can view request history and response history.
+3. User can trigger re-request preview, re-request, and dispatch-next for eligible requests.
+4. Active request guard is enforced per user.
 
-FR-09 Re-request
-1. User can create a follow-up request from an eligible prior request.
-2. Re-request must show the same distance bucket counts before confirmation.
-3. Re-request dispatch must avoid overlap with previously contacted donors for that request chain.
+FR-09 Donor Response Update
+1. Dummy endpoint exists to mark donor response by phone number input.
+2. Response is linked to request context and visible in user response history.
 
-FR-10 Dispatch Next
-1. User can trigger "next 20" for an active request.
-2. System advances dispatch window and contacts next eligible donors.
-3. Contact counters and timestamps must update.
+FR-10 Logging
+1. API entry and exit logs are controller-level and minimal.
+2. Exception handling is centralized with structured responses.
 
-FR-11 Donor Response Update
-1. A dummy API must exist to mark donor responded=true using patient mobile number input.
-2. Response must be linked to request and user context.
-3. Requester can view list of responded donors with related request ID.
-
-FR-12 Active Request Guard
-1. System must enforce one active request guard per user.
-2. New request creation is blocked when active request exists.
-
-FR-13 Request and Response History
-1. User can view request history.
-2. User can view donor response history.
-3. UI must expose actions such as re-request and dispatch-next based on eligibility.
-
-FR-14 Analytics
-1. Grafana must read Elasticsearch and ClickHouse datasources.
-2. Dashboards must reflect ETL-loaded and ETL-incremented data.
-
-FR-15 Error and Validation Behavior
-1. Invalid inputs must fail fast with typed API errors.
-2. Validation errors must return structured validation payloads.
-3. Unexpected exceptions are centrally handled with safe response payloads.
-
-FR-16 Logging Behavior
-1. Logs should be minimal and controller-focused.
-2. Log important API triggers/results and centralized exceptions.
-3. Avoid service-level request logs except ETL trigger visibility where needed.
+FR-11 Analytics and Observability
+1. Grafana must load with provisioned Elasticsearch and ClickHouse datasources.
+2. Simple dashboard panels must execute queries successfully against both datasources.
 
 
-SECTION B - TECHNICAL CONSTRAINTS AND RESTRICTIONS
+SECTION B - TECHNICAL CONSTRAINTS
 
-TC-01 Storage Responsibility
-1. PostgreSQL is the system of record for users, searches, requests, responses.
-2. Elasticsearch is the operational search store for blood bank and donor queries.
-3. ClickHouse is analytics-only (reporting/Grafana), not operational request search.
+TC-01 Storage Roles
+1. PostgreSQL primary stores users, searches, requests, and responses.
+2. Elasticsearch stores operational search projections.
+3. ClickHouse stores analytics and ingestion facts.
 
-TC-02 Data Source Isolation
-1. Backend must not embed source extraction logic for WHO/Redcross.
-2. Frontend must not call WHO/Redcross APIs for application workflows.
+TC-02 Source Isolation
+1. Backend must not embed WHO or Redcross extraction logic.
+2. Frontend must not call WHO or Redcross APIs for app workflows.
 
-TC-03 Geo and Indexing Constraints
-1. Elasticsearch bank/donor indexes must keep location as geo_point.
-2. Nearest blood-bank query must use Elasticsearch native geo sort and max size 20.
-3. ETL must resolve pincode to coordinates and continue safely on missing mappings using fallback defaults.
+TC-03 API Contract Discipline
+1. Public API request and response payloads remain typed DTOs.
+2. Error responses remain typed and predictable.
 
-TC-04 ETL Startup and Mapping
-1. ETL must ensure Elasticsearch templates/mappings exist before indexing begins.
-2. ETL must support bulk-load idempotency and incremental continuation.
+TC-04 ETL Structure
+1. ETL orchestration stays service-oriented (no god-class design).
+2. Bulk and incremental behavior must remain explicit and deterministic.
+3. ETL state persistence uses `/data/state.json` for sync continuation.
 
-TC-05 API Contract Constraints
-1. External/public API payloads must be typed DTO contracts.
-2. No Map-based request/response contracts for public APIs.
-3. Error payloads must remain typed DTO responses.
+TC-05 Runtime Predictability
+1. Input validation is fail-fast.
+2. Fresh environment runs should behave deterministically.
 
-TC-06 Internal Code Constraints
-1. Method signatures should prefer typed objects over generic maps.
-2. Internal ETL processing may use in-memory maps for merge/index mechanics only.
-3. Redcross and WHO SQL queries must be class-level final constants.
-4. Redcross and WHO DTO boilerplate must use Lombok conventions.
-5. Elasticsearch integration should use class-level query templates plus typed response mapping.
-
-TC-07 Security and Simplicity Constraints (Current Scope)
-1. Do not add JWT or complex auth for this dummy project scope.
-2. Keep login gating simple: donor flows hidden/blocked when not logged in.
-3. Current local OTP stays deterministic/hardcoded.
-
-TC-08 Behavioral Quality Constraints
-1. Input validation must be deterministic and fail-fast.
-2. Runtime behavior must preserve current-path predictability for fresh environment runs.
+TC-06 Scope Simplicity
+1. No JWT or complex auth in current scope.
+2. Keep implementation minimal and avoid unnecessary abstraction.
 
 
-SECTION C - OPERATIONAL VALIDATION CHECKLIST (CURRENT)
+SECTION C - API SURFACE (CURRENT)
 
-1. Start stack: docker compose up -d --build
-2. Verify containers: docker compose ps
-3. Seed data + CSV preview: python db-seeder/seed.py
-4. Verify preview lines (100 records + header)
-5. Trigger bulk ETL: GET http://localhost:8083/admin/etl/bulk-load
-6. Re-trigger bulk ETL and confirm idempotent response
-7. Validate Elasticsearch counts for donor and blood-bank indexes
-8. Validate ClickHouse counts for donor and blood-bank dimensions
-9. Validate backend donor search from CSV-driven test combinations
-10. Validate Grafana login and datasource presence (Elasticsearch + ClickHouse)
-11. Validate OTP behavior: correct 123456 works, wrong OTP returns 401 Invalid OTP
+Backend direct routes (service on `:8080`):
+1. `GET /reference-data`
+2. `POST /auth/send-otp`
+3. `POST /auth/verify-otp`
+4. `POST /users/get-or-create`
+5. `GET /blood-banks/search`
+6. `GET /donors/search`
+7. `POST /searches/{userId}`
+8. `POST /requests/{searchId}`
+9. `GET /requests/{requestId}/re-request-preview`
+10. `POST /requests/{requestId}/re-request`
+11. `POST /requests/{requestId}/dispatch-next`
+12. `GET /requests/user/{userId}`
+13. `GET /requests/user/{userId}/responses`
+14. `GET /requests/user/{userId}/active`
+15. `POST /responses/{requestId}`
+16. `GET /responses/{requestId}`
+17. `POST /responses/mark-responded`
+
+Frontend proxy routes (service on `:3001`):
+1. `/api/backend/*` -> backend `/*`
+
+Source system routes:
+1. Redcross: `/api/redcross/centres`, `/api/redcross/centres/incremental`, `/api/redcross/people`, `/api/redcross/people/incremental`, `/incremental`
+2. WHO: `/api/who/blood-banks`, `/api/who/blood-banks/incremental`, `/api/who/donors`, `/api/who/donors/incremental`, `/incremental`
+
+ETL admin route:
+1. `GET /admin/etl/bulk-load`
 
 
-SECTION D - ENHANCEMENTS (TRANSACTION INVENTORY + DAILY ANALYTICS)
+SECTION D - OPERATIONAL E2E VALIDATION CHECKLIST
 
-FR-17 Analytics Cadence
-1. Operational search projections may update frequently in Elasticsearch.
-2. Analytics warehouse load to ClickHouse must run once daily.
-3. Default daily analytics schedule is 00:10 Asia/Kolkata.
+1. Start stack with clean build: `docker compose up -d --build`
+2. Verify all critical containers are running/healthy: `docker compose ps`
+3. Seed source data: `python db-seeder/seed.py`
+4. Trigger ETL bulk: `GET http://localhost:8083/admin/etl/bulk-load`
+5. Re-trigger ETL bulk and verify idempotent completion response
+6. Validate source inventory transaction counts from WHO and Redcross databases
+7. Validate ClickHouse `blood_ops.fact_inventory_transaction` count and source-aware uniqueness
+8. Validate backend `GET /reference-data`
+9. Validate backend `GET /blood-banks/search`
+10. Validate backend `GET /donors/search`
+11. Validate frontend blood-bank and donor flows on `http://localhost:3001`
+12. Validate Grafana login on `http://localhost:3000`
+13. Validate Elasticsearch datasource query execution in Grafana
+14. Validate ClickHouse datasource query execution in Grafana
+15. Validate controller `api.enter` and `api.exit` logs for exercised endpoints
 
-FR-18 Inventory Transaction Model
-1. Source inventory data must be transaction-level, not snapshot-level.
-2. Each inventory transaction must include:
-   a. inflow/outflow/adjustment type
-   b. event timestamp
-   c. blood group
-   d. blood component
-   e. blood bank foreign key
-   f. optional donor foreign key
-   g. optional expiry date
-   h. quantity delta in units
-   i. running balance after transaction
-3. Transaction records are immutable; corrections are new adjustment transactions.
 
-FR-19 Day-Level Warehouse Facts
-1. ClickHouse analytical inventory facts must be stored at day grain.
-2. Daily inventory fact must include:
-   a. opening balance units
-   b. inflow units
-   c. outflow units
-   d. adjustment units
-   e. closing balance units
-   f. donation and withdrawal event counts
-3. Daily donor fact must include donor activity and eligibility metrics.
+SECTION E - SCHEMA DESIGNS (SIMPLE TABLE/COLUMN LIST)
 
-FR-20 Historical KPI Coverage
-1. System must answer historical analytics such as:
-   a. total donations in a month (example: April)
-   b. opening balance for a month
-   c. closing balance for a month
-2. Week, month, quarter, and year analytics must be derived from day-level facts.
+PRIMARY POSTGRESQL (`backend/src/main/resources/schema.sql`)
+- users: user_id, name, abha_id, phone, created_at
+- searches: search_id, user_id, hospital_name, hospital_pincode, blood_group, blood_component, created_at
+- requests: request_id, search_id, blood_group, component, units_requested, number_of_donors_contacted, status, parent_request_id, created_at, expires_at, last_notified_at
+- responses: response_id, request_id, donor_id, donor_name, abha_id, phone_number, blood_group, location, response_status, responded_at
+- blood_group_lookup: blood_group_code, sort_order, is_active
+- blood_component_lookup: blood_component_name, sort_order, is_active
 
-TC-09 Analytics Update Constraint
-1. ClickHouse analytical tables must not receive high-frequency operational updates.
-2. Analytical facts are refreshed only by scheduled daily analytics pipeline runs.
+REDCROSS POSTGRESQL (`Redcross/src/main/resources/sourcetables.sql`)
+- blood_bank: bb_id, name, category, contact_number, email, full_address, postal_code, created_at, updated_at
+- blood_inventory_transaction: transaction_id, source_event_id, bb_id, donor_id, blood_group, component, transaction_type, units_delta, running_balance_after, expiry_date, event_timestamp, created_at, updated_at
+- blood_donor: donor_id, bb_id, full_name, national_id, contact_number, address, blood_type, age, last_donation_date, created_at, updated_at
 
-TC-10 Aggregation Ownership
-1. Source systems provide raw transaction events.
-2. ETL moves normalized transaction events.
-3. ClickHouse owns day-level and larger-period analytical aggregation.
+WHO POSTGRESQL (`who/src/main/resources/source_coder.sql`)
+- blood_bank: bb_id, name, category, phone, email, street, city, state, pincode, created_at, updated_at
+- blood_inventory_transaction: transaction_id, source_event_id, bb_id, donor_id, blood_group, component, transaction_type, units_delta, running_balance_after, expiry_date, event_timestamp, created_at, updated_at
+- blood_donor: donor_id, bb_id, name, aadhaar_hash, phone, city, state, pincode, blood_group, age, last_donated, created_at, updated_at
 
-TC-11 Warehouse Fact Immutability
-1. Raw transaction facts are append-only.
-2. Reprocessing and reruns must remain idempotent by deterministic business keys.
-
-SECTION E - OPERATIONAL VALIDATION CHECKLIST (ENHANCEMENTS)
-
-1. Verify source schemas contain transaction-level inventory table definitions.
-2. Seed deterministic transaction data and regenerate CSV preview.
-3. Validate ETL incremental updates Elasticsearch current donor and blood-bank projections.
-4. Validate daily analytics schedule executes at 00:10 Asia/Kolkata.
-5. Validate ClickHouse day-grain inventory facts have unique key dimensions per day.
-6. Validate opening and closing balances across consecutive days.
-7. Validate April KPI queries (total donations, opening, closing) are deterministic.
+CLICKHOUSE (`Clickhouse/resources/schema_clickhouse.sql`)
+- blood_ops.dim_source: source_id, source_code, source_name, is_active, updated_at
+- blood_ops.dim_blood_group: blood_group_id, blood_group, updated_at
+- blood_ops.dim_component: component_id, component_name, updated_at
+- blood_ops.dim_location: location_id, pincode, city, state, street_or_address, latitude, longitude, updated_at
+- blood_ops.dim_blood_bank: bank_id, source_id, source_bank_id, bank_name, category, phone, email, location_id, created_at, updated_at, is_deleted, version
+- blood_ops.dim_donor: donor_sk, source_id, source_donor_id, bank_id, donor_name, donor_identity_hash, phone, location_id, blood_group_id, age, last_donated_date, created_at, updated_at, is_deleted, version
+- blood_ops.dim_date: date_id, dt, year, quarter, month, day, iso_week
+- blood_ops.dim_time: time_id, event_time, event_date_id, hour, minute
+- blood_ops.fact_inventory_transaction: source_transaction_id, source_event_id, source_id, bank_id, donor_sk, blood_group, component, transaction_type, units_delta, running_balance_after, expiry_date, event_time, is_deleted, ingested_at, version
+- blood_ops.fact_inventory_day: event_date, source_id, bank_id, blood_group, component, opening_balance_units, inflow_units, outflow_units, adjustment_units, closing_balance_units, donation_events_count, withdrawal_events_count, updated_at, version
+- blood_ops.fact_donor_snapshot: donor_fact_id, source_id, donor_sk, bank_id, location_id, blood_group_id, event_time_id, event_date_id, age, donor_count, eligible_donor_count, is_deleted, last_donated_date, snapshot_updated_at, ingested_at, version
+- blood_ops.fact_donor_day: event_date, source_id, bank_id, blood_group_id, total_donors, eligible_donors, updated_at, version
+- blood_ops.fact_ingestion_event: event_time_id, event_date_id, source_id, api_name, record_type, success_count, error_count, total_count
+- blood_ops.source_ingestion_hourly_agg: event_hour, source, api_name, record_type, record_count

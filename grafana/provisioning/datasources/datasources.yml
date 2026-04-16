@@ -8,7 +8,7 @@ datasources:
     isDefault: true
     editable: true
     jsonData:
-      index: request_events*
+      index: bb_inventory_current*
       timeField: event_time
       esVersion: 8
 

@@ -92,7 +92,7 @@ public class EtlPipelineService {
         initialized = true;
     }
 
-    private synchronized void runBulkLoad() {
+    private void runBulkLoad() {
         if (bulkLoadDone) {
             return;
         }
