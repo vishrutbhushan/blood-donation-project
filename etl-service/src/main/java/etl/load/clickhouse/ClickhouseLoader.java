@@ -18,12 +18,15 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
 @Component
 public class ClickhouseLoader {
+    private static final Logger logger = LoggerFactory.getLogger(ClickhouseLoader.class);
     private final RestClient clickhouse;
     private final Set<String> seededSources = new HashSet<>();
     private final Set<String> seededBloodGroups = new HashSet<>();
@@ -299,6 +302,60 @@ public class ClickhouseLoader {
             + "WHERE toDate(snapshot_updated_at) = toDate('" + esc(day) + "') "
             + "AND is_deleted = 0 "
             + "GROUP BY source_id, bank_id, blood_group_id");
+    }
+
+    public void batchAggregateInventoryDays() {
+        String datesQuery = "SELECT DISTINCT toDate(event_time) as day FROM blood_ops.fact_inventory_transaction WHERE is_deleted = 0";
+        try {
+            String result = clickhouse.post()
+                .contentType(Objects.requireNonNull(MediaType.TEXT_PLAIN))
+                .body(Objects.requireNonNull(datesQuery, "query"))
+                .retrieve()
+                .body(String.class);
+            
+            if (result != null && !result.isBlank()) {
+                String[] lines = result.trim().split("\n");
+                for (String line : lines) {
+                    if (!line.isBlank()) {
+                        try {
+                            LocalDate day = LocalDate.parse(line.trim());
+                            aggregateInventoryDay(day);
+                        } catch (Exception e) {
+                            logger.warn("Failed to parse date {} for inventory aggregation: {}", line, e.getMessage());
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            logger.warn("Failed to batch aggregate inventory days: {}", e.getMessage());
+        }
+    }
+
+    public void batchAggregateDonorDays() {
+        String datesQuery = "SELECT DISTINCT toDate(snapshot_updated_at) as day FROM blood_ops.fact_donor_snapshot WHERE is_deleted = 0";
+        try {
+            String result = clickhouse.post()
+                .contentType(Objects.requireNonNull(MediaType.TEXT_PLAIN))
+                .body(Objects.requireNonNull(datesQuery, "query"))
+                .retrieve()
+                .body(String.class);
+            
+            if (result != null && !result.isBlank()) {
+                String[] lines = result.trim().split("\n");
+                for (String line : lines) {
+                    if (!line.isBlank()) {
+                        try {
+                            LocalDate day = LocalDate.parse(line.trim());
+                            aggregateDonorDay(day);
+                        } catch (Exception e) {
+                            logger.warn("Failed to parse date {} for donor aggregation: {}", line, e.getMessage());
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            logger.warn("Failed to batch aggregate donor days: {}", e.getMessage());
+        }
     }
 
     private void sql(String query) {

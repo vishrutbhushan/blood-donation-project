@@ -126,6 +126,8 @@ public class EtlPipelineService {
         clickhouseLoader.loadBanks(banks);
         clickhouseLoader.loadDonors(donors);
         clickhouseLoader.loadInventoryTransactions(pendingTransactions);
+        clickhouseLoader.batchAggregateInventoryDays();
+        clickhouseLoader.batchAggregateDonorDays();
         elasticsearchLoader.loadBanks(banks, currentInventoryState);
         elasticsearchLoader.loadDonors(donors);
 
