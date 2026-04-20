@@ -675,7 +675,7 @@ def seed_redcross(conn, preview_rows):
     print(f"[Red Cross] Inserting {BANKS_PER_RUN} new banks ...")
     for _ in range(BANKS_PER_RUN):
         city, state, _w, pincodes = pick_city()
-        postal   = random.choice(PINCODE_POOL) if PINCODE_POOL else random.choice(pincodes)
+        postal   = random.choice(pincodes)
         name     = make_bank_name(city, REDCROSS_NAME_TEMPLATES)
         phone    = rnd_mobile()
         email    = rnd_email(name)
@@ -766,7 +766,7 @@ def seed_redcross(conn, preview_rows):
         for _ in range(batch_n):
             bb_id    = random.choice(all_bb_ids)
             city, state, _w, pincodes = pick_city()
-            postal   = random.choice(PINCODE_POOL) if PINCODE_POOL else random.choice(pincodes)
+            postal   = random.choice(pincodes)
             fname    = full_name()
             nat_id   = unique_id()
             b_type   = pick_blood_group()
@@ -822,7 +822,7 @@ def seed_who(conn, preview_rows):
     print(f"[WHO] Inserting {BANKS_PER_RUN} new banks ...")
     for _ in range(BANKS_PER_RUN):
         city, state, _w, pincodes = pick_city()
-        pincode  = random.choice(PINCODE_POOL) if PINCODE_POOL else random.choice(pincodes)
+        pincode  = random.choice(pincodes)
         name     = make_bank_name(city, WHO_NAME_TEMPLATES)
         phone    = rnd_mobile()
         email    = rnd_email(name)
@@ -913,7 +913,7 @@ def seed_who(conn, preview_rows):
         for _ in range(batch_n):
             bb_id    = random.choice(all_bb_ids)
             city, state, _w, pincodes = pick_city()
-            pincode  = random.choice(PINCODE_POOL) if PINCODE_POOL else random.choice(pincodes)
+            pincode  = random.choice(pincodes)
             fname    = full_name()
             a_hash   = unique_id()
             bg       = pick_blood_group()
