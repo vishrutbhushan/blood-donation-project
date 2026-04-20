@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Locale;
 import org.springframework.jdbc.core.BeanPropertyRowMapper;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
@@ -171,7 +172,7 @@ public class WhoRepository {
     }
 
     public List<WhoDonorDTO> fetchDonorsFiltered(String bloodGroup, String pincode, int limit) {
-        String bg = (bloodGroup == null || bloodGroup.isBlank()) ? null : bloodGroup;
+        String bg = normalizeBloodGroup(bloodGroup);
         String pin = (pincode == null || pincode.isBlank()) ? null : pincode;
         int bounded = Math.max(1, Math.min(limit, MAX_LIMIT));
 
@@ -184,6 +185,20 @@ public class WhoRepository {
                     ps.setInt(5, bounded);
                 },
                 BeanPropertyRowMapper.newInstance(WhoDonorDTO.class));
+    }
+
+    private String normalizeBloodGroup(String bloodGroup) {
+        if (bloodGroup == null || bloodGroup.isBlank()) {
+            return null;
+        }
+        String normalized = bloodGroup.trim().toUpperCase(Locale.ROOT).replaceAll("\\s+", " ");
+        if ("BOMBAY".equals(normalized) || "HH".equals(normalized) || "OH".equals(normalized)) {
+            return "BBG";
+        }
+        if ("RHNULL".equals(normalized) || "RH-NULL".equals(normalized)) {
+            return "RH NULL";
+        }
+        return normalized;
     }
 
     public List<WhoDonorDTO> fetchDonorsSince(long since) {

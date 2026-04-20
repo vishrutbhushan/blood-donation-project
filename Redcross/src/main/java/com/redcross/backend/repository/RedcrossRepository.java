@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Locale;
 import org.springframework.jdbc.core.BeanPropertyRowMapper;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
@@ -174,7 +175,7 @@ public class RedcrossRepository {
     }
 
     public List<RedcrossDonorDTO> fetchPeopleFiltered(String bloodGroup, String pincode, int limit) {
-        String bg = (bloodGroup == null || bloodGroup.isBlank()) ? null : bloodGroup;
+        String bg = normalizeBloodGroup(bloodGroup);
         String pin = (pincode == null || pincode.isBlank()) ? null : pincode;
         int bounded = Math.max(1, Math.min(limit, MAX_LIMIT));
 
@@ -187,6 +188,20 @@ public class RedcrossRepository {
                     ps.setInt(5, bounded);
                 },
                 BeanPropertyRowMapper.newInstance(RedcrossDonorDTO.class));
+    }
+
+    private String normalizeBloodGroup(String bloodGroup) {
+        if (bloodGroup == null || bloodGroup.isBlank()) {
+            return null;
+        }
+        String normalized = bloodGroup.trim().toUpperCase(Locale.ROOT).replaceAll("\\s+", " ");
+        if ("BOMBAY".equals(normalized) || "HH".equals(normalized) || "OH".equals(normalized)) {
+            return "BBG";
+        }
+        if ("RHNULL".equals(normalized) || "RH-NULL".equals(normalized)) {
+            return "RH NULL";
+        }
+        return normalized;
     }
 
     public List<RedcrossDonorDTO> fetchPeopleSince(long since) {
