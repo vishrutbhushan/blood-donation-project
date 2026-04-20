@@ -189,17 +189,13 @@ Current metadata already present in the repository:
 Implemented warehouse metadata catalog tables:
 1. `blood_ops.meta_source_system`
 2. `blood_ops.meta_dataset`
-3. `blood_ops.meta_column`
-4. `blood_ops.meta_lineage`
-5. `blood_ops.meta_load_audit`
+3. `blood_ops.meta_load_audit`
 
 What is not yet present:
 1. Automatic population of the metadata catalog tables from the ETL pipeline.
 2. A UI or admin API for browsing metadata catalog contents.
 
 Recommended metadata layer for this project:
-1. `meta_source_system` - source system code, name, owner, active flag.
-2. `meta_dataset` - logical dataset name, physical table, engine, refresh mode.
-3. `meta_column` - dataset, column name, data type, business meaning, nullable flag.
-4. `meta_lineage` - target column, source column, transform rule, source system.
-5. `meta_load_audit` - batch_id, source system, target, row counts, started_at, ended_at, status, message.
+1. `meta_source_system` - source system code, name, active flag.
+2. `meta_dataset` - logical dataset name, physical table, source system, active flag.
+3. `meta_load_audit` - batch_id, source system, target dataset, row counts, started_at, ended_at, status, message.
