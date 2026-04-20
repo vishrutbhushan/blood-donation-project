@@ -30,9 +30,10 @@ from psycopg2.extras import execute_values
 # ---------------------------------------------------------------------------
 # Tune per run — adjust without restarting Docker
 # ---------------------------------------------------------------------------
-BANKS_PER_RUN  = 20           # new blood banks to insert each invocation
-DONORS_PER_RUN = 100          # new donors to insert each invocation
-BATCH_SIZE     = 10_000       # rows per executemany batch (keeps memory bounded)
+BANKS_PER_RUN  = 500              # new blood banks to insert each invocation
+DONORS_PER_RUN = 1_000_000        # new donors to insert each invocation
+INVENTORY_TXN_PER_RUN = 1_000_000 # inventory transactions per DB per run
+BATCH_SIZE     = 10_000           # rows per executemany batch (keeps memory bounded)
 CSV_PREVIEW_ROWS = 100        # overwrite a 100-row preview CSV on each run
 CSV_PREVIEW_PATH = Path(__file__).resolve().with_name("generated_seed_preview.csv")
 RANDOM_SEED = 42
@@ -95,13 +96,13 @@ WHO_COMPONENTS      = ["Whole Blood", "Packed RBC", "Fresh Frozen Plasma", "Plas
 def load_pincode_pool():
     file_path = Path(__file__).resolve().parents[1] / "pincode.js"
     if not file_path.exists():
-        return []
+        return set()
 
     raw = file_path.read_text(encoding="utf-8")
     body = re.sub(r"^\s*let\s+pincodelist\s*=\s*", "", raw, flags=re.DOTALL)
     body = re.sub(r"\s*;\s*module\.exports\s*=\s*pincodelist\s*;\s*$", "", body, flags=re.DOTALL)
     data = json.loads(body)
-    return list(data.keys())
+    return set(data.keys())
 
 
 PINCODE_POOL = load_pincode_pool()
@@ -271,6 +272,36 @@ CITY_DATA = [
     ("Srinagar",      "Jammu and Kashmir", 3,
      ["190001","190002","190003","190004","190005","190006","190007","190008","190009","190010"]),
 ]
+
+# Filter each city's pincodes to only include those in pincode.js
+if PINCODE_POOL:
+    _pincode_list = sorted(PINCODE_POOL)          # sorted list for fallback searches
+    _filtered = []
+    _removed_total = 0
+    _fallback_cities = []
+    for city, state, weight, pincodes in CITY_DATA:
+        valid = [p for p in pincodes if p in PINCODE_POOL]
+        removed = len(pincodes) - len(valid)
+        _removed_total += removed
+        if not valid:
+            # Fallback 1: try 3-digit prefix match
+            prefix3 = pincodes[0][:3]
+            valid = [p for p in _pincode_list if p.startswith(prefix3)][:5]
+        if not valid:
+            # Fallback 2: try 2-digit prefix match
+            prefix2 = pincodes[0][:2]
+            valid = [p for p in _pincode_list if p.startswith(prefix2)][:5]
+        if not valid:
+            # Fallback 3: just pick 5 random valid pincodes
+            valid = _pincode_list[:5]
+        if removed > 0:
+            _fallback_cities.append(f"{city} ({removed}/{removed + len(valid) - (len(valid) if removed == len(pincodes) else 0)})")
+        _filtered.append((city, state, weight, valid))
+    CITY_DATA = _filtered
+    # Verify no city has empty pincodes
+    for city, state, weight, pincodes in CITY_DATA:
+        assert len(pincodes) > 0, f"City {city} has no valid pincodes after filtering!"
+    print(f"[Pincode] Filtered city pincodes against pincode.js — removed {_removed_total} invalid codes")
 
 CITY_WEIGHTS = [c[2] for c in CITY_DATA]
 
@@ -504,76 +535,73 @@ def make_source_event_id(source, bb_id, blood_group, component, sequence, event_
     return f"{source}-{bb_id}-{sequence}-{digest}"
 
 
-def generate_inventory_transactions(source, bb_id, bank_created_at, components):
-    transactions = []
+# Inventory transaction date range: Jan 1 2024 → today + 2 days
+INVENTORY_DATE_START = date(2024, 1, 1)
+INVENTORY_DATE_END   = date.today() + timedelta(days=2)
+
+
+def rnd_inventory_updated_at() -> datetime:
+    """Random datetime uniformly between Jan 1 2024 and today + 2 days."""
+    return rnd_dt_between(INVENTORY_DATE_START, INVENTORY_DATE_END)
+
+
+def generate_inventory_transactions_batch(source, all_bb_ids, components, target_count):
+    """
+    Generate `target_count` inventory transactions spread across all banks.
+    updated_at is uniformly random between Jan 1 2024 and today+2.
+    Yields batches of tuples ready for execute_values.
+    """
+    generated = 0
     sequence = 0
+    batch = []
 
-    for bg in BLOOD_GROUPS:
-        for component in components:
-            running_balance = max(0, inventory_qty(bg, component))
-            first_event = rnd_updated_at(bank_created_at)
+    while generated < target_count:
+        bb_id = random.choice(all_bb_ids)
+        bg = pick_blood_group()
+        component = random.choice(components)
+        txn_type = random.choices(["INFLOW", "OUTFLOW", "ADJUSTMENT"], weights=[45, 45, 10], k=1)[0]
 
-            sequence += 1
-            source_event_id = make_source_event_id(source, bb_id, bg, component, sequence, first_event, "INFLOW")
-            transactions.append({
-                "source_event_id": source_event_id,
-                "bb_id": bb_id,
-                "donor_id": None,
-                "blood_group": bg,
-                "component": component,
-                "transaction_type": "INFLOW",
-                "units_delta": running_balance,
-                "running_balance_after": running_balance,
-                "expiry_date": (first_event.date() + timedelta(days=expiry_days(component))),
-                "event_timestamp": first_event,
-                "updated_at": first_event,
-            })
+        event_time = rnd_inventory_updated_at()
+        updated_at = event_time
 
-            daily_events = random.randint(3, 9)
-            event_times = sorted(rnd_updated_at(first_event) for _ in range(daily_events))
+        running_balance = max(0, inventory_qty(bg, component))
+        donor_id = None
+        expiry = None
 
-            for event_time in event_times:
-                txn_type = random.choices(["INFLOW", "OUTFLOW", "ADJUSTMENT"], weights=[45, 45, 10], k=1)[0]
-                donor_id = None
-                expiry = None
+        if txn_type == "INFLOW":
+            delta = random.randint(1, max(2, (running_balance // 2) + 1))
+            donor_id = random.randint(1, max(1, DONORS_PER_RUN))
+            expiry = event_time.date() + timedelta(days=expiry_days(component))
+        elif txn_type == "OUTFLOW":
+            if running_balance <= 0:
+                txn_type = "INFLOW"
+                delta = random.randint(1, 3)
+                donor_id = random.randint(1, max(1, DONORS_PER_RUN))
+                expiry = event_time.date() + timedelta(days=expiry_days(component))
+            else:
+                delta = -random.randint(1, min(running_balance, max(1, running_balance // 2)))
+        else:
+            raw_delta = random.randint(-3, 3)
+            delta = raw_delta if raw_delta != 0 else 1
+            if running_balance + delta < 0:
+                delta = -running_balance
 
-                if txn_type == "INFLOW":
-                    delta = random.randint(1, max(2, (running_balance // 2) + 1))
-                    donor_id = random.randint(1, max(1, DONORS_PER_RUN))
-                    expiry = event_time.date() + timedelta(days=expiry_days(component))
-                elif txn_type == "OUTFLOW":
-                    if running_balance <= 0:
-                        txn_type = "INFLOW"
-                        delta = random.randint(1, 3)
-                        donor_id = random.randint(1, max(1, DONORS_PER_RUN))
-                        expiry = event_time.date() + timedelta(days=expiry_days(component))
-                    else:
-                        delta = -random.randint(1, min(running_balance, max(1, running_balance // 2)))
-                else:
-                    raw_delta = random.randint(-3, 3)
-                    delta = raw_delta if raw_delta != 0 else 1
-                    if running_balance + delta < 0:
-                        delta = -running_balance
+        running_balance = max(0, running_balance + delta)
+        sequence += 1
+        source_event_id = make_source_event_id(source, bb_id, bg, component, sequence, event_time, txn_type)
 
-                running_balance = max(0, running_balance + delta)
-                sequence += 1
-                source_event_id = make_source_event_id(source, bb_id, bg, component, sequence, event_time, txn_type)
+        batch.append((
+            source_event_id, bb_id, donor_id, bg, component,
+            txn_type, delta, running_balance, expiry, event_time, updated_at,
+        ))
+        generated += 1
 
-                transactions.append({
-                    "source_event_id": source_event_id,
-                    "bb_id": bb_id,
-                    "donor_id": donor_id,
-                    "blood_group": bg,
-                    "component": component,
-                    "transaction_type": txn_type,
-                    "units_delta": delta,
-                    "running_balance_after": running_balance,
-                    "expiry_date": expiry,
-                    "event_timestamp": event_time,
-                    "updated_at": event_time,
-                })
+        if len(batch) >= BATCH_SIZE:
+            yield batch
+            batch = []
 
-    return transactions
+    if batch:
+        yield batch
 
 
 def full_name():
@@ -670,7 +698,6 @@ def write_preview_csv(preview_rows):
 
 def seed_redcross(conn, preview_rows):
     cur = conn.cursor()
-    inventory_txn_rows = []
 
     print(f"[Red Cross] Inserting {BANKS_PER_RUN} new banks ...")
     for _ in range(BANKS_PER_RUN):
@@ -712,47 +739,28 @@ def seed_redcross(conn, preview_rows):
             event_time=bank_cat,
             updated_at=bank_uat,
         )
-
-        for txn in generate_inventory_transactions("redcross", bb_id, bank_cat, REDCROSS_COMPONENTS):
-            inventory_txn_rows.append((
-                txn["source_event_id"],
-                txn["bb_id"],
-                txn["donor_id"],
-                txn["blood_group"],
-                txn["component"],
-                txn["transaction_type"],
-                txn["units_delta"],
-                txn["running_balance_after"],
-                txn["expiry_date"],
-                txn["event_timestamp"],
-                txn["updated_at"],
-            ))
-            preview_record(
-                preview_rows,
-                source="RedCross",
-                entity_type="inventory_transaction",
-                bank_id=bb_id,
-                record_id=txn["source_event_id"],
-                blood_group=txn["blood_group"],
-                component=txn["component"],
-                quantity=txn["units_delta"],
-                units_available=txn["running_balance_after"],
-                event_time=txn["event_timestamp"],
-                updated_at=txn["updated_at"],
-                notes=txn["transaction_type"],
-            )
-
-    execute_values(
-        cur,
-        """INSERT INTO inventory_transaction
-           (source_event_id, bb_id, donor_id, blood_group, component,
-            transaction_type, units_delta, running_balance_after,
-            expiry_date, event_timestamp, updated_at)
-           VALUES %s""",
-        inventory_txn_rows,
-    )
     conn.commit()
-    print(f"[Red Cross] {BANKS_PER_RUN} banks + {len(inventory_txn_rows)} inventory transactions committed.")
+    print(f"[Red Cross] {BANKS_PER_RUN} banks committed.")
+
+    # Generate 1M inventory transactions across ALL banks
+    cur.execute("SELECT bb_id FROM blood_bank")
+    all_bb_ids_for_inv = [row[0] for row in cur.fetchall()]
+    print(f"[Red Cross] Generating {INVENTORY_TXN_PER_RUN:,} inventory transactions (updated_at: {INVENTORY_DATE_START} → {INVENTORY_DATE_END}) ...")
+    inv_inserted = 0
+    for batch in generate_inventory_transactions_batch("redcross", all_bb_ids_for_inv, REDCROSS_COMPONENTS, INVENTORY_TXN_PER_RUN):
+        execute_values(
+            cur,
+            """INSERT INTO inventory_transaction
+               (source_event_id, bb_id, donor_id, blood_group, component,
+                transaction_type, units_delta, running_balance_after,
+                expiry_date, event_timestamp, updated_at)
+               VALUES %s""",
+            batch,
+        )
+        conn.commit()
+        inv_inserted += len(batch)
+        print(f"  [Red Cross] inventory txns: {inv_inserted:,} / {INVENTORY_TXN_PER_RUN:,}", end="\r", flush=True)
+    print(f"\n[Red Cross] {inv_inserted:,} inventory transactions committed.")
 
     # Spread donors across ALL banks in the DB (including from prior runs)
     cur.execute("SELECT bb_id FROM blood_bank")
@@ -808,7 +816,7 @@ def seed_redcross(conn, preview_rows):
         print(f"  [Red Cross] donors: {inserted:,} / {DONORS_PER_RUN:,}", end="\r", flush=True)
 
     cur.close()
-    print(f"\n[Red Cross] Done — {BANKS_PER_RUN} new banks | {len(inventory_txn_rows)} inventory transactions | {DONORS_PER_RUN:,} new donors")
+    print(f"\n[Red Cross] Done — {BANKS_PER_RUN} new banks | {INVENTORY_TXN_PER_RUN:,} inventory transactions | {DONORS_PER_RUN:,} new donors")
 
 
 # ---------------------------------------------------------------------------
@@ -817,7 +825,6 @@ def seed_redcross(conn, preview_rows):
 
 def seed_who(conn, preview_rows):
     cur = conn.cursor()
-    inventory_txn_rows = []
 
     print(f"[WHO] Inserting {BANKS_PER_RUN} new banks ...")
     for _ in range(BANKS_PER_RUN):
@@ -859,47 +866,28 @@ def seed_who(conn, preview_rows):
             event_time=bank_cat,
             updated_at=bank_uat,
         )
-
-        for txn in generate_inventory_transactions("who", bb_id, bank_cat, WHO_COMPONENTS):
-            inventory_txn_rows.append((
-                txn["source_event_id"],
-                txn["bb_id"],
-                txn["donor_id"],
-                txn["blood_group"],
-                txn["component"],
-                txn["transaction_type"],
-                txn["units_delta"],
-                txn["running_balance_after"],
-                txn["expiry_date"],
-                txn["event_timestamp"],
-                txn["updated_at"],
-            ))
-            preview_record(
-                preview_rows,
-                source="WHO",
-                entity_type="inventory_transaction",
-                bank_id=bb_id,
-                record_id=txn["source_event_id"],
-                blood_group=txn["blood_group"],
-                component=txn["component"],
-                quantity=txn["units_delta"],
-                units_available=txn["running_balance_after"],
-                event_time=txn["event_timestamp"],
-                updated_at=txn["updated_at"],
-                notes=txn["transaction_type"],
-            )
-
-    execute_values(
-        cur,
-        """INSERT INTO inventory_transaction
-           (source_event_id, bb_id, donor_id, blood_group, component,
-            transaction_type, units_delta, running_balance_after,
-            expiry_date, event_timestamp, updated_at)
-           VALUES %s""",
-        inventory_txn_rows,
-    )
     conn.commit()
-    print(f"[WHO] {BANKS_PER_RUN} banks + {len(inventory_txn_rows)} inventory transactions committed.")
+    print(f"[WHO] {BANKS_PER_RUN} banks committed.")
+
+    # Generate 1M inventory transactions across ALL banks
+    cur.execute("SELECT bb_id FROM blood_bank")
+    all_bb_ids_for_inv = [row[0] for row in cur.fetchall()]
+    print(f"[WHO] Generating {INVENTORY_TXN_PER_RUN:,} inventory transactions (updated_at: {INVENTORY_DATE_START} → {INVENTORY_DATE_END}) ...")
+    inv_inserted = 0
+    for batch in generate_inventory_transactions_batch("who", all_bb_ids_for_inv, WHO_COMPONENTS, INVENTORY_TXN_PER_RUN):
+        execute_values(
+            cur,
+            """INSERT INTO inventory_transaction
+               (source_event_id, bb_id, donor_id, blood_group, component,
+                transaction_type, units_delta, running_balance_after,
+                expiry_date, event_timestamp, updated_at)
+               VALUES %s""",
+            batch,
+        )
+        conn.commit()
+        inv_inserted += len(batch)
+        print(f"  [WHO] inventory txns: {inv_inserted:,} / {INVENTORY_TXN_PER_RUN:,}", end="\r", flush=True)
+    print(f"\n[WHO] {inv_inserted:,} inventory transactions committed.")
 
     # Spread donors across ALL banks in the DB (including from prior runs)
     cur.execute("SELECT bb_id FROM blood_bank")
@@ -953,7 +941,7 @@ def seed_who(conn, preview_rows):
         print(f"  [WHO] donors: {inserted:,} / {DONORS_PER_RUN:,}", end="\r", flush=True)
 
     cur.close()
-    print(f"\n[WHO] Done — {BANKS_PER_RUN} new banks | {len(inventory_txn_rows)} inventory transactions | {DONORS_PER_RUN:,} new donors")
+    print(f"\n[WHO] Done — {BANKS_PER_RUN} new banks | {INVENTORY_TXN_PER_RUN:,} inventory transactions | {DONORS_PER_RUN:,} new donors")
 
 
 # ---------------------------------------------------------------------------
@@ -961,7 +949,7 @@ def seed_who(conn, preview_rows):
 # ---------------------------------------------------------------------------
 
 def main():
-    print(f"Realistic DB seeder  (BANKS_PER_RUN={BANKS_PER_RUN}, DONORS_PER_RUN={DONORS_PER_RUN:,})\n")
+    print(f"Realistic DB seeder  (BANKS_PER_RUN={BANKS_PER_RUN}, DONORS_PER_RUN={DONORS_PER_RUN:,}, INVENTORY_TXN_PER_RUN={INVENTORY_TXN_PER_RUN:,})\n")
     preview_rows = []
 
     try:
