@@ -5,8 +5,11 @@ import com.hemo.backend.dto.DonorSearchResponseDTO;
 import com.hemo.backend.entity.Request;
 import com.hemo.backend.entity.Response;
 import com.hemo.backend.repository.ResponseRepository;
+import com.twilio.rest.api.v2010.account.Message;
+import com.twilio.type.PhoneNumber;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -14,6 +17,9 @@ import org.springframework.stereotype.Service;
 public class RequestDispatchService {
     private final ResponseRepository responseRepository;
     private final DonorSearchService donorSearchService;
+
+    @Value("${twilio.whatsapp-number}")
+    private String twilioWhatsappNumber;
 
     public int dispatchBatchForRequest(Request request, int batchSize) {
         if (batchSize <= 0) {
@@ -35,18 +41,51 @@ public class RequestDispatchService {
                 break;
             }
 
-            Response contact = new Response();
-            contact.setRequest(request);
-            contact.setDonorId(donor.getDonorId());
-            contact.setDonorName(donor.getName());
-            contact.setPhoneNumber(donor.getPhone());
-            contact.setBloodGroup(donor.getBloodGroup());
-            contact.setLocation(donor.getLocation());
-            contact.setResponseStatus("NO");
-            responseRepository.save(contact);
+            Response contact_number = new Response();
+            contact_number.setRequest(request);
+            contact_number.setDonorId(donor.getDonorId());
+            contact_number.setDonorName(donor.getName());
+            contact_number.setPhoneNumber(donor.getPhone());
+            contact_number.setBloodGroup(donor.getBloodGroup());
+            contact_number.setLocation(donor.getLocation());
+            contact_number.setResponseStatus("NO");
+            responseRepository.save(contact_number);
+
+            // Send WhatsApp notification to donor
+            if (donor.getPhone() != null && !donor.getPhone().isBlank()) {
+                try {
+                    sendWhatsAppToDonor(
+                        donor.getPhone(),
+                        request.getBloodGroup(),
+                        request.getComponent(),
+                        String.valueOf(request.getRequestId())
+                    );
+                } catch (Exception e) {
+                    System.err.println("WhatsApp failed for donor "
+                        + donor.getDonorId() + ": " + e.getMessage());
+                }
+            } else {
+                System.err.println("No phone number for donor: " + donor.getDonorId());
+            }
+
             sent++;
         }
 
         return sent;
+    }
+
+    private void sendWhatsAppToDonor(String donorPhone, String bloodGroup,
+                                      String component, String reqCode) {
+        Message.creator(
+            new PhoneNumber("whatsapp:+91" + donorPhone),
+            new PhoneNumber("whatsapp:" + twilioWhatsappNumber),
+            "HEMO-CONNECT ALERT: Urgent blood request near you.\n" +
+            "Blood Group: " + bloodGroup + "\n" +
+            "Component: " + component + "\n" +
+            "Request ID: " + reqCode + "\n" +
+            "Reply YES to share your contact or NO to decline."
+        ).create();
+
+        System.out.println("WhatsApp sent to +91" + donorPhone);
     }
 }
