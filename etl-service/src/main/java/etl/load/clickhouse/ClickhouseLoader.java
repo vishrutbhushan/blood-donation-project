@@ -47,6 +47,7 @@ public class ClickhouseLoader {
             + "source_transaction_id String,"
             + "source_event_id String,"
             + "source_id UInt8,"
+            + "source_system LowCardinality(String),"
             + "bank_id UInt64,"
             + "donor_sk UInt64,"
             + "blood_group LowCardinality(String),"
@@ -66,6 +67,7 @@ public class ClickhouseLoader {
         sql("CREATE TABLE IF NOT EXISTS blood_ops.fact_inventory_day ("
             + "event_date Date,"
             + "source_id UInt8,"
+            + "source_system LowCardinality(String),"
             + "bank_id UInt64,"
             + "blood_group LowCardinality(String),"
             + "component LowCardinality(String),"
@@ -85,6 +87,7 @@ public class ClickhouseLoader {
         sql("CREATE TABLE IF NOT EXISTS blood_ops.fact_donor_day ("
             + "event_date Date,"
             + "source_id UInt8,"
+            + "source_system LowCardinality(String),"
             + "bank_id UInt64,"
             + "blood_group_id UInt8,"
             + "total_donors UInt32,"
@@ -94,14 +97,6 @@ public class ClickhouseLoader {
             + ") ENGINE = ReplacingMergeTree(version) "
             + "PARTITION BY toYYYYMM(event_date) "
             + "ORDER BY (event_date, source_id, bank_id, blood_group_id)");
-
-        sql("CREATE TABLE IF NOT EXISTS blood_ops.meta_source_system ("
-            + "source_code LowCardinality(String),"
-            + "source_name String,"
-            + "is_active UInt8 DEFAULT 1,"
-            + "created_at DateTime DEFAULT now()"
-            + ") ENGINE = ReplacingMergeTree(created_at) "
-            + "ORDER BY source_code");
 
         sql("CREATE TABLE IF NOT EXISTS blood_ops.meta_dataset ("
             + "dataset_name LowCardinality(String),"
@@ -127,7 +122,6 @@ public class ClickhouseLoader {
             + "PARTITION BY toYYYYMM(started_at) "
             + "ORDER BY (started_at, source_system, target_dataset, batch_id)");
 
-        sql("ALTER TABLE blood_ops.meta_source_system MODIFY COLUMN created_at DateTime('Asia/Kolkata')");
         sql("ALTER TABLE blood_ops.meta_dataset MODIFY COLUMN created_at DateTime('Asia/Kolkata')");
         sql("ALTER TABLE blood_ops.meta_load_audit MODIFY COLUMN started_at DateTime('Asia/Kolkata')");
         sql("ALTER TABLE blood_ops.meta_load_audit MODIFY COLUMN ended_at DateTime('Asia/Kolkata')");
@@ -236,9 +230,10 @@ public class ClickhouseLoader {
             int donorCount = isDeleted == 1 ? 0 : 1;
 
             sql("INSERT INTO blood_ops.fact_donor_snapshot "
-                + "(donor_fact_id, source_id, donor_sk, bank_id, location_id, blood_group_id, event_time_id, event_date_id, age, donor_count, eligible_donor_count, is_deleted, last_donated_date, snapshot_updated_at, version) VALUES ("
+                + "(donor_fact_id, source_id, source_system, donor_sk, bank_id, location_id, blood_group_id, event_time_id, event_date_id, age, donor_count, eligible_donor_count, is_deleted, last_donated_date, snapshot_updated_at, version) VALUES ("
                 + stableUInt64("fact-donor:" + d.getSource() + ":" + d.getDonorId() + ":" + version) + ","
                 + sourceId + ","
+                + q(d.getSource()) + ","
                 + donorSk + ","
                 + bankId + ","
                 + locationId + ","
@@ -277,11 +272,12 @@ public class ClickhouseLoader {
             int isDeleted = isDelete(t.getOp()) ? 1 : 0;
 
             sql("INSERT INTO blood_ops.fact_inventory_transaction "
-                + "(source_transaction_id, source_event_id, source_id, bank_id, donor_sk, blood_group, component, "
+                + "(source_transaction_id, source_event_id, source_id, source_system, bank_id, donor_sk, blood_group, component, "
                 + "transaction_type, units_delta, running_balance_after, expiry_date, event_time, is_deleted, version) VALUES ("
                 + q(t.getTransactionId()) + ","
                 + q(t.getSourceEventId()) + ","
                 + sourceId + ","
+                + q(t.getSource()) + ","
                 + bankId + ","
                 + donorSk + ","
                 + q(normalizeBloodGroup(t.getBloodGroup())) + ","
@@ -303,11 +299,12 @@ public class ClickhouseLoader {
         long version = System.currentTimeMillis();
 
         sql("INSERT INTO blood_ops.fact_inventory_day "
-            + "(event_date, source_id, bank_id, blood_group, component, opening_balance_units, inflow_units, outflow_units, "
+            + "(event_date, source_id, source_system, bank_id, blood_group, component, opening_balance_units, inflow_units, outflow_units, "
             + "adjustment_units, closing_balance_units, donation_events_count, withdrawal_events_count, version) "
             + "SELECT "
             + "toDate('" + esc(day) + "') AS event_date, "
             + "source_id, "
+            + "source_system, "
             + "bank_id, "
             + "blood_group, "
             + "component, "
@@ -322,7 +319,7 @@ public class ClickhouseLoader {
             + "FROM blood_ops.fact_inventory_transaction "
             + "WHERE toDate(event_time) = toDate('" + esc(day) + "') "
             + "AND is_deleted = 0 "
-            + "GROUP BY source_id, bank_id, blood_group, component");
+            + "GROUP BY source_id, source_system, bank_id, blood_group, component");
     }
 
     public void aggregateDonorDay(LocalDate businessDate) {
@@ -330,10 +327,11 @@ public class ClickhouseLoader {
         long version = System.currentTimeMillis();
 
         sql("INSERT INTO blood_ops.fact_donor_day "
-            + "(event_date, source_id, bank_id, blood_group_id, total_donors, eligible_donors, version) "
+            + "(event_date, source_id, source_system, bank_id, blood_group_id, total_donors, eligible_donors, version) "
             + "SELECT "
             + "toDate('" + esc(day) + "') AS event_date, "
             + "source_id, "
+            + "source_system, "
             + "bank_id, "
             + "blood_group_id, "
             + "toUInt32(sum(donor_count)) AS total_donors, "
@@ -342,7 +340,7 @@ public class ClickhouseLoader {
             + "FROM blood_ops.fact_donor_snapshot "
             + "WHERE toDate(snapshot_updated_at) = toDate('" + esc(day) + "') "
             + "AND is_deleted = 0 "
-            + "GROUP BY source_id, bank_id, blood_group_id");
+            + "GROUP BY source_id, source_system, bank_id, blood_group_id");
     }
 
     public void batchAggregateInventoryDays() {
@@ -424,18 +422,11 @@ public class ClickhouseLoader {
     }
 
     private void seedMetadataCatalog() {
-        if (scalarLong("SELECT count() FROM blood_ops.meta_source_system") > 0) {
+        if (scalarLong("SELECT count() FROM blood_ops.meta_dataset") > 0) {
             return;
         }
 
-        seedSourceSystems();
         seedDatasets();
-    }
-
-    private void seedSourceSystems() {
-        sql("INSERT INTO blood_ops.meta_source_system (source_code, source_name, is_active, created_at) VALUES "
-            + "(" + q(Constants.SOURCE_REDCROSS) + ", 'Redcross Source', 1, now()),"
-            + "(" + q(Constants.SOURCE_WHO) + ", 'WHO Source', 1, now())");
     }
 
     private void seedDatasets() {

@@ -30,7 +30,6 @@ DROP TABLE IF EXISTS blood_ops.meta_load_audit;
 DROP TABLE IF EXISTS blood_ops.meta_lineage;
 DROP TABLE IF EXISTS blood_ops.meta_column;
 DROP TABLE IF EXISTS blood_ops.meta_dataset;
-DROP TABLE IF EXISTS blood_ops.meta_source_system;
 
 DROP TABLE IF EXISTS blood_ops.dim_time;
 DROP TABLE IF EXISTS blood_ops.dim_date;
@@ -143,6 +142,7 @@ CREATE TABLE IF NOT EXISTS blood_ops.fact_inventory_transaction (
     source_transaction_id String,
     source_event_id String,
     source_id UInt8,
+    source_system LowCardinality(String),
     bank_id UInt64,
     donor_sk UInt64,
     blood_group LowCardinality(String),
@@ -163,6 +163,7 @@ ORDER BY (source_id, source_transaction_id);
 CREATE TABLE IF NOT EXISTS blood_ops.fact_inventory_day (
     event_date Date,
     source_id UInt8,
+    source_system LowCardinality(String),
     bank_id UInt64,
     blood_group LowCardinality(String),
     component LowCardinality(String),
@@ -183,6 +184,7 @@ ORDER BY (event_date, source_id, bank_id, blood_group, component);
 CREATE TABLE IF NOT EXISTS blood_ops.fact_donor_snapshot (
     donor_fact_id UInt64,
     source_id UInt8,
+    source_system LowCardinality(String),
     donor_sk UInt64,
     bank_id UInt64,
     location_id UInt64,
@@ -205,6 +207,7 @@ ORDER BY (event_date_id, source_id, bank_id, blood_group_id, donor_sk, donor_fac
 CREATE TABLE IF NOT EXISTS blood_ops.fact_donor_day (
     event_date Date,
     source_id UInt8,
+    source_system LowCardinality(String),
     bank_id UInt64,
     blood_group_id UInt8,
     total_donors UInt32,
@@ -410,15 +413,6 @@ FROM blood_ops.fact_donor_day
 GROUP BY event_date, source_id, bank_id;
 
 -- Metadata catalog tables
-CREATE TABLE IF NOT EXISTS blood_ops.meta_source_system (
-    source_code LowCardinality(String),
-    source_name String,
-    is_active UInt8 DEFAULT 1,
-    created_at DateTime('Asia/Kolkata') DEFAULT now()
-)
-ENGINE = ReplacingMergeTree(created_at)
-ORDER BY source_code;
-
 CREATE TABLE IF NOT EXISTS blood_ops.meta_dataset (
     dataset_name LowCardinality(String),
     physical_table String,
