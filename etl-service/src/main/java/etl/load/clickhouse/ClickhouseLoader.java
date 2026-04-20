@@ -11,6 +11,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.HashSet;
@@ -157,6 +158,18 @@ public class ClickhouseLoader {
             + ") ENGINE = MergeTree "
             + "PARTITION BY toYYYYMM(started_at) "
             + "ORDER BY (started_at, source_system, target_system, target_dataset, batch_id)");
+
+        sql("ALTER TABLE blood_ops.meta_source_system MODIFY COLUMN created_at DateTime('Asia/Kolkata')");
+        sql("ALTER TABLE blood_ops.meta_source_system MODIFY COLUMN updated_at DateTime('Asia/Kolkata')");
+        sql("ALTER TABLE blood_ops.meta_dataset MODIFY COLUMN created_at DateTime('Asia/Kolkata')");
+        sql("ALTER TABLE blood_ops.meta_dataset MODIFY COLUMN updated_at DateTime('Asia/Kolkata')");
+        sql("ALTER TABLE blood_ops.meta_column MODIFY COLUMN created_at DateTime('Asia/Kolkata')");
+        sql("ALTER TABLE blood_ops.meta_column MODIFY COLUMN updated_at DateTime('Asia/Kolkata')");
+        sql("ALTER TABLE blood_ops.meta_lineage MODIFY COLUMN created_at DateTime('Asia/Kolkata')");
+        sql("ALTER TABLE blood_ops.meta_lineage MODIFY COLUMN updated_at DateTime('Asia/Kolkata')");
+        sql("ALTER TABLE blood_ops.meta_load_audit MODIFY COLUMN started_at DateTime('Asia/Kolkata')");
+        sql("ALTER TABLE blood_ops.meta_load_audit MODIFY COLUMN ended_at DateTime('Asia/Kolkata')");
+        sql("ALTER TABLE blood_ops.meta_load_audit MODIFY COLUMN created_at DateTime('Asia/Kolkata')");
 
         seedMetadataCatalog();
     }
@@ -681,7 +694,7 @@ public class ClickhouseLoader {
     }
 
     private String dtFromMillis(long millis) {
-        return dt(java.time.LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(millis), ZoneOffset.UTC).format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
+        return dt(java.time.LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(millis), ZoneId.of("Asia/Kolkata")).format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
     }
 
     private String q(String text) {

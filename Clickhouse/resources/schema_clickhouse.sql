@@ -415,8 +415,8 @@ CREATE TABLE IF NOT EXISTS blood_ops.meta_source_system (
     source_name String,
     owner String,
     is_active UInt8 DEFAULT 1,
-    created_at DateTime DEFAULT now(),
-    updated_at DateTime DEFAULT now()
+    created_at DateTime('Asia/Kolkata') DEFAULT now(),
+    updated_at DateTime('Asia/Kolkata') DEFAULT now()
 )
 ENGINE = ReplacingMergeTree(updated_at)
 ORDER BY source_code;
@@ -428,8 +428,8 @@ CREATE TABLE IF NOT EXISTS blood_ops.meta_dataset (
     refresh_mode LowCardinality(String),
     description String,
     is_active UInt8 DEFAULT 1,
-    created_at DateTime DEFAULT now(),
-    updated_at DateTime DEFAULT now()
+    created_at DateTime('Asia/Kolkata') DEFAULT now(),
+    updated_at DateTime('Asia/Kolkata') DEFAULT now()
 )
 ENGINE = ReplacingMergeTree(updated_at)
 ORDER BY dataset_name;
@@ -441,8 +441,8 @@ CREATE TABLE IF NOT EXISTS blood_ops.meta_column (
     is_nullable UInt8,
     business_definition String,
     source_system LowCardinality(String),
-    created_at DateTime DEFAULT now(),
-    updated_at DateTime DEFAULT now()
+    created_at DateTime('Asia/Kolkata') DEFAULT now(),
+    updated_at DateTime('Asia/Kolkata') DEFAULT now()
 )
 ENGINE = ReplacingMergeTree(updated_at)
 ORDER BY (dataset_name, column_name);
@@ -455,8 +455,8 @@ CREATE TABLE IF NOT EXISTS blood_ops.meta_lineage (
     source_column String,
     transform_rule String,
     is_active UInt8 DEFAULT 1,
-    created_at DateTime DEFAULT now(),
-    updated_at DateTime DEFAULT now()
+    created_at DateTime('Asia/Kolkata') DEFAULT now(),
+    updated_at DateTime('Asia/Kolkata') DEFAULT now()
 )
 ENGINE = ReplacingMergeTree(updated_at)
 ORDER BY (target_dataset, target_column, source_system, source_dataset, source_column);
@@ -473,7 +473,7 @@ CREATE TABLE IF NOT EXISTS blood_ops.meta_load_audit (
     rows_written UInt64,
     status LowCardinality(String),
     message String,
-    created_at DateTime DEFAULT now()
+    created_at DateTime('Asia/Kolkata') DEFAULT now()
 )
 ENGINE = MergeTree
 PARTITION BY toYYYYMM(started_at)
