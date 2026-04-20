@@ -93,6 +93,72 @@ public class ClickhouseLoader {
             + ") ENGINE = ReplacingMergeTree(version) "
             + "PARTITION BY toYYYYMM(event_date) "
             + "ORDER BY (event_date, source_id, bank_id, blood_group_id)");
+
+        sql("CREATE TABLE IF NOT EXISTS blood_ops.meta_source_system ("
+            + "source_code LowCardinality(String),"
+            + "source_name String,"
+            + "owner String,"
+            + "is_active UInt8 DEFAULT 1,"
+            + "created_at DateTime DEFAULT now(),"
+            + "updated_at DateTime DEFAULT now()"
+            + ") ENGINE = ReplacingMergeTree(updated_at) "
+            + "ORDER BY source_code");
+
+        sql("CREATE TABLE IF NOT EXISTS blood_ops.meta_dataset ("
+            + "dataset_name LowCardinality(String),"
+            + "physical_table String,"
+            + "dataset_type LowCardinality(String),"
+            + "refresh_mode LowCardinality(String),"
+            + "description String,"
+            + "is_active UInt8 DEFAULT 1,"
+            + "created_at DateTime DEFAULT now(),"
+            + "updated_at DateTime DEFAULT now()"
+            + ") ENGINE = ReplacingMergeTree(updated_at) "
+            + "ORDER BY dataset_name");
+
+        sql("CREATE TABLE IF NOT EXISTS blood_ops.meta_column ("
+            + "dataset_name LowCardinality(String),"
+            + "column_name String,"
+            + "data_type String,"
+            + "is_nullable UInt8,"
+            + "business_definition String,"
+            + "source_system LowCardinality(String),"
+            + "created_at DateTime DEFAULT now(),"
+            + "updated_at DateTime DEFAULT now()"
+            + ") ENGINE = ReplacingMergeTree(updated_at) "
+            + "ORDER BY (dataset_name, column_name)");
+
+        sql("CREATE TABLE IF NOT EXISTS blood_ops.meta_lineage ("
+            + "target_dataset LowCardinality(String),"
+            + "target_column String,"
+            + "source_system LowCardinality(String),"
+            + "source_dataset String,"
+            + "source_column String,"
+            + "transform_rule String,"
+            + "is_active UInt8 DEFAULT 1,"
+            + "created_at DateTime DEFAULT now(),"
+            + "updated_at DateTime DEFAULT now()"
+            + ") ENGINE = ReplacingMergeTree(updated_at) "
+            + "ORDER BY (target_dataset, target_column, source_system, source_dataset, source_column)");
+
+        sql("CREATE TABLE IF NOT EXISTS blood_ops.meta_load_audit ("
+            + "batch_id String,"
+            + "source_system LowCardinality(String),"
+            + "target_system LowCardinality(String),"
+            + "target_dataset String,"
+            + "started_at DateTime,"
+            + "ended_at DateTime,"
+            + "duration_ms UInt64,"
+            + "rows_read UInt64,"
+            + "rows_written UInt64,"
+            + "status LowCardinality(String),"
+            + "message String,"
+            + "created_at DateTime DEFAULT now()"
+            + ") ENGINE = MergeTree "
+            + "PARTITION BY toYYYYMM(started_at) "
+            + "ORDER BY (started_at, source_system, target_system, target_dataset, batch_id)");
+
+        seedMetadataCatalog();
     }
 
     public void loadBanks(List<BloodBank> banks) {
@@ -358,6 +424,108 @@ public class ClickhouseLoader {
         }
     }
 
+    public void recordLoadAudit(
+            String batchId,
+            String sourceSystem,
+            String targetSystem,
+            String targetDataset,
+            long startedAtMillis,
+            long endedAtMillis,
+            long rowsRead,
+            long rowsWritten,
+            String status,
+            String message) {
+        long durationMs = Math.max(0L, endedAtMillis - startedAtMillis);
+        sql("INSERT INTO blood_ops.meta_load_audit "
+            + "(batch_id, source_system, target_system, target_dataset, started_at, ended_at, duration_ms, rows_read, rows_written, status, message) VALUES ("
+            + q(batchId) + ","
+            + q(sourceSystem) + ","
+            + q(targetSystem) + ","
+            + q(targetDataset) + ","
+            + dtFromMillis(startedAtMillis) + ","
+            + dtFromMillis(endedAtMillis) + ","
+            + durationMs + ","
+            + rowsRead + ","
+            + rowsWritten + ","
+            + q(status) + ","
+            + q(message) + ")");
+    }
+
+    private void seedMetadataCatalog() {
+        if (scalarLong("SELECT count() FROM blood_ops.meta_source_system") > 0) {
+            return;
+        }
+
+        seedSourceSystems();
+        seedDatasets();
+        seedColumns();
+        seedLineage();
+    }
+
+    private void seedSourceSystems() {
+        sql("INSERT INTO blood_ops.meta_source_system (source_code, source_name, owner, is_active, created_at, updated_at) VALUES "
+            + "(" + q(Constants.SOURCE_REDCROSS) + ", 'Redcross Source', 'platform', 1, now(), now()),"
+            + "(" + q(Constants.SOURCE_WHO) + ", 'WHO Source', 'platform', 1, now(), now())");
+    }
+
+    private void seedDatasets() {
+        sql("INSERT INTO blood_ops.meta_dataset (dataset_name, physical_table, dataset_type, refresh_mode, description, is_active, created_at, updated_at) VALUES "
+            + "('redcross_blood_bank', 'redcross_db.blood_bank', 'source_table', 'incremental', 'Redcross blood bank source table', 1, now(), now()),"
+            + "('redcross_blood_donor', 'redcross_db.blood_donor', 'source_table', 'incremental', 'Redcross donor source table', 1, now(), now()),"
+            + "('who_blood_bank', 'who_db.blood_bank', 'source_table', 'incremental', 'WHO blood bank source table', 1, now(), now()),"
+            + "('who_blood_donor', 'who_db.blood_donor', 'source_table', 'incremental', 'WHO donor source table', 1, now(), now()),"
+            + "('dim_source', 'blood_ops.dim_source', 'dimension', 'etl', 'Source system dimension', 1, now(), now()),"
+            + "('dim_location', 'blood_ops.dim_location', 'dimension', 'etl', 'Geographic lookup dimension', 1, now(), now()),"
+            + "('dim_blood_bank', 'blood_ops.dim_blood_bank', 'dimension', 'etl', 'Blood bank dimension', 1, now(), now()),"
+            + "('dim_donor', 'blood_ops.dim_donor', 'dimension', 'etl', 'Donor dimension', 1, now(), now()),"
+            + "('fact_inventory_transaction', 'blood_ops.fact_inventory_transaction', 'fact', 'etl', 'Inventory transaction fact', 1, now(), now()),"
+            + "('fact_inventory_day', 'blood_ops.fact_inventory_day', 'aggregate_fact', 'etl', 'Inventory daily aggregate fact', 1, now(), now()),"
+            + "('fact_donor_snapshot', 'blood_ops.fact_donor_snapshot', 'fact', 'etl', 'Donor snapshot fact', 1, now(), now()),"
+            + "('fact_donor_day', 'blood_ops.fact_donor_day', 'aggregate_fact', 'etl', 'Donor daily aggregate fact', 1, now(), now()),"
+            + "('fact_ingestion_event', 'blood_ops.fact_ingestion_event', 'fact', 'etl', 'Ingestion audit fact', 1, now(), now()),"
+            + "('source_ingestion_hourly_agg', 'blood_ops.source_ingestion_hourly_agg', 'aggregate_fact', 'etl', 'Hourly source ingestion aggregate', 1, now(), now())");
+    }
+
+    private void seedColumns() {
+        sql("INSERT INTO blood_ops.meta_column (dataset_name, column_name, data_type, is_nullable, business_definition, source_system, created_at, updated_at) VALUES "
+            + "('who_blood_donor', 'donor_id', 'UInt64', 0, 'WHO donor identifier', 'who', now(), now()),"
+            + "('who_blood_donor', 'city', 'String', 1, 'Donor city', 'who', now(), now()),"
+            + "('who_blood_donor', 'state', 'String', 1, 'Donor state', 'who', now(), now()),"
+            + "('who_blood_donor', 'pincode', 'String', 1, 'Donor pincode', 'who', now(), now()),"
+            + "('redcross_blood_donor', 'donor_id', 'UInt64', 0, 'Redcross donor identifier', 'redcross', now(), now()),"
+            + "('redcross_blood_donor', 'address', 'String', 1, 'Donor address', 'redcross', now(), now()),"
+            + "('dim_location', 'latitude', 'Float64', 0, 'Resolved latitude', 'etl', now(), now()),"
+            + "('dim_location', 'longitude', 'Float64', 0, 'Resolved longitude', 'etl', now(), now()),"
+            + "('fact_inventory_transaction', 'units_delta', 'Int32', 0, 'Inventory delta units', 'etl', now(), now()),"
+            + "('fact_donor_day', 'eligible_donors', 'UInt32', 0, 'Eligible donor count for a day', 'etl', now(), now())");
+    }
+
+    private void seedLineage() {
+        sql("INSERT INTO blood_ops.meta_lineage (target_dataset, target_column, source_system, source_dataset, source_column, transform_rule, is_active, created_at, updated_at) VALUES "
+            + "('dim_location', 'city', 'who', 'who_blood_donor', 'city', 'direct map from source row', 1, now(), now()),"
+            + "('dim_location', 'state', 'who', 'who_blood_donor', 'state', 'direct map from source row', 1, now(), now()),"
+            + "('dim_location', 'pincode', 'who', 'who_blood_donor', 'pincode', 'direct map from source row', 1, now(), now()),"
+            + "('dim_location', 'city', 'redcross', 'redcross_blood_donor', 'address', 'derived from address/pincode lookup', 1, now(), now()),"
+            + "('dim_blood_bank', 'location_id', 'who', 'who_blood_bank', 'pincode', 'hashed location key from pincode and address', 1, now(), now()),"
+            + "('fact_inventory_transaction', 'source_id', 'who', 'who_blood_bank', 'bb_id', 'source to warehouse source dimension mapping', 1, now(), now())");
+    }
+
+    private long scalarLong(String query) {
+        String result = clickhouse.post()
+            .contentType(Objects.requireNonNull(MediaType.TEXT_PLAIN))
+            .body(Objects.requireNonNull(query, "query"))
+            .retrieve()
+            .body(String.class);
+        if (result == null || result.isBlank()) {
+            return 0L;
+        }
+        String firstLine = result.trim().split("\\R")[0].trim();
+        if (firstLine.isBlank()) {
+            return 0L;
+        }
+        return Long.parseLong(firstLine);
+    }
+
     private void sql(String query) {
         clickhouse.post()
             .contentType(Objects.requireNonNull(MediaType.TEXT_PLAIN))
@@ -510,6 +678,10 @@ public class ClickhouseLoader {
 
     private String dt(String dateTime) {
         return "parseDateTimeBestEffort('" + esc(dateTime) + "')";
+    }
+
+    private String dtFromMillis(long millis) {
+        return dt(java.time.LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(millis), ZoneOffset.UTC).format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
     }
 
     private String q(String text) {

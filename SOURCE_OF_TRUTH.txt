@@ -176,3 +176,30 @@ CLICKHOUSE (`Clickhouse/resources/schema_clickhouse.sql`)
 - blood_ops.fact_donor_day: event_date, source_id, bank_id, blood_group_id, total_donors, eligible_donors, updated_at, version
 - blood_ops.fact_ingestion_event: event_time_id, event_date_id, source_id, api_name, record_type, success_count, error_count, total_count
 - blood_ops.source_ingestion_hourly_agg: event_hour, source, api_name, record_type, record_count
+
+SECTION F - METADATA STATUS
+
+Current metadata already present in the repository:
+1. Source schema metadata: PostgreSQL schema files for backend, WHO, and Redcross.
+2. Warehouse schema metadata: ClickHouse DDL in `Clickhouse/resources/schema_clickhouse.sql`.
+3. ETL load state metadata: `etl-service/src/main/java/etl/service/EtlStateStore.java` persists last sync timestamps in `/data/state.json`.
+4. Operational datasource metadata: Grafana provisioning files for Elasticsearch and ClickHouse.
+5. Documentation metadata: `README.md` and this file describe runtime topology and table inventory.
+
+Implemented warehouse metadata catalog tables:
+1. `blood_ops.meta_source_system`
+2. `blood_ops.meta_dataset`
+3. `blood_ops.meta_column`
+4. `blood_ops.meta_lineage`
+5. `blood_ops.meta_load_audit`
+
+What is not yet present:
+1. Automatic population of the metadata catalog tables from the ETL pipeline.
+2. A UI or admin API for browsing metadata catalog contents.
+
+Recommended metadata layer for this project:
+1. `meta_source_system` - source system code, name, owner, active flag.
+2. `meta_dataset` - logical dataset name, physical table, engine, refresh mode.
+3. `meta_column` - dataset, column name, data type, business meaning, nullable flag.
+4. `meta_lineage` - target column, source column, transform rule, source system.
+5. `meta_load_audit` - batch_id, source system, target, row counts, started_at, ended_at, status, message.

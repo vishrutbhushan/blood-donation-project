@@ -9,7 +9,9 @@ import etl.model.EtlBatch;
 import etl.model.InventoryTransaction;
 import etl.source.SourceHandler;
 import etl.util.PincodeGeoMap;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -69,12 +71,13 @@ public class EtlPipelineService {
             return;
         }
 
+        long startedAt = System.currentTimeMillis();
         long now = System.currentTimeMillis();
         for (SourceHandler sourceHandler : sourceHandlers) {
             pullAndMerge(sourceHandler, stateStore.getLastSyncTs(sourceHandler.sourceName()), now);
         }
 
-        flushToTargets();
+        flushToTargets("incremental", startedAt);
         for (SourceHandler sourceHandler : sourceHandlers) {
             stateStore.setLastSyncTs(sourceHandler.sourceName(), now);
         }
@@ -98,12 +101,13 @@ public class EtlPipelineService {
         }
 
         accumulator.reset();
+        long startedAt = System.currentTimeMillis();
         long now = System.currentTimeMillis();
         for (SourceHandler sourceHandler : sourceHandlers) {
             pullAndMerge(sourceHandler, Constants.INITIAL_PULL_START_TS, now);
         }
 
-        flushToTargets();
+        flushToTargets("bulk", startedAt);
         for (SourceHandler sourceHandler : sourceHandlers) {
             stateStore.setLastSyncTs(sourceHandler.sourceName(), now);
         }
@@ -117,7 +121,7 @@ public class EtlPipelineService {
         accumulator.merge(sourceHandler.sourceName(), batch);
     }
 
-    private void flushToTargets() {
+    private void flushToTargets(String batchType, long startedAt) {
         List<BloodBank> banks = accumulator.collectLatestBanks();
         List<Donor> donors = accumulator.collectLatestDonors(banks);
         List<InventoryTransaction> pendingTransactions = accumulator.collectPendingInventoryTransactions();
@@ -131,6 +135,98 @@ public class EtlPipelineService {
         elasticsearchLoader.loadBanks(banks, currentInventoryState);
         elasticsearchLoader.loadDonors(donors);
 
+        long endedAt = System.currentTimeMillis();
+        recordAuditRows(batchType, startedAt, endedAt, banks, donors, pendingTransactions, currentInventoryState);
         accumulator.clearPendingInventoryTransactions();
+    }
+
+    private void recordAuditRows(
+            String batchType,
+            long startedAt,
+            long endedAt,
+            List<BloodBank> banks,
+            List<Donor> donors,
+            List<InventoryTransaction> pendingTransactions,
+            List<InventoryTransaction> currentInventoryState) {
+        Map<String, long[]> countsBySource = new HashMap<>();
+        accumulateBankCounts(countsBySource, banks);
+        accumulateDonorCounts(countsBySource, donors);
+        accumulateTransactionCounts(countsBySource, pendingTransactions);
+
+        long totalRead = 0L;
+        long totalWritten = 0L;
+        for (Map.Entry<String, long[]> entry : countsBySource.entrySet()) {
+            long[] counts = entry.getValue();
+            long rowsRead = counts[0];
+            long rowsWritten = counts[1];
+            totalRead += rowsRead;
+            totalWritten += rowsWritten;
+            clickhouseLoader.recordLoadAudit(
+                batchType + "-" + startedAt + "-" + entry.getKey(),
+                entry.getKey(),
+                "clickhouse/elasticsearch",
+                "etl_batch",
+                startedAt,
+                endedAt,
+                rowsRead,
+                rowsWritten,
+                "success",
+                "banks+donors+inventory loaded");
+        }
+
+        long inventoryProjectionRows = currentInventoryState == null ? 0L : currentInventoryState.size();
+        clickhouseLoader.recordLoadAudit(
+            batchType + "-" + startedAt + "-all",
+            "all",
+            "clickhouse/elasticsearch",
+            "etl_batch",
+            startedAt,
+            endedAt,
+            totalRead,
+            totalWritten,
+            "success",
+            "batch completed; inventory_state_rows=" + inventoryProjectionRows);
+    }
+
+    private void accumulateBankCounts(Map<String, long[]> countsBySource, List<BloodBank> banks) {
+        if (banks == null) {
+            return;
+        }
+        for (BloodBank bank : banks) {
+            if (bank == null || bank.getSource() == null) {
+                continue;
+            }
+            addCounts(countsBySource, bank.getSource(), 1L, 1L);
+        }
+    }
+
+    private void accumulateDonorCounts(Map<String, long[]> countsBySource, List<Donor> donors) {
+        if (donors == null) {
+            return;
+        }
+        for (Donor donor : donors) {
+            if (donor == null || donor.getSource() == null) {
+                continue;
+            }
+            addCounts(countsBySource, donor.getSource(), 1L, 1L);
+        }
+    }
+
+    private void accumulateTransactionCounts(Map<String, long[]> countsBySource, List<InventoryTransaction> transactions) {
+        if (transactions == null) {
+            return;
+        }
+        for (InventoryTransaction transaction : transactions) {
+            if (transaction == null || transaction.getSource() == null) {
+                continue;
+            }
+            addCounts(countsBySource, transaction.getSource(), 1L, 1L);
+        }
+    }
+
+    private void addCounts(Map<String, long[]> countsBySource, String source, long readIncrement, long writtenIncrement) {
+        long[] counts = countsBySource.computeIfAbsent(source, key -> new long[2]);
+        counts[0] += readIncrement;
+        counts[1] += writtenIncrement;
     }
 }

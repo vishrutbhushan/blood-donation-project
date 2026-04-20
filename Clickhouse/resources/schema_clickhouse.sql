@@ -26,6 +26,11 @@ DROP TABLE IF EXISTS blood_ops.fact_donor_snapshot;
 DROP TABLE IF EXISTS blood_ops.fact_inventory_day;
 DROP TABLE IF EXISTS blood_ops.fact_inventory_transaction;
 DROP TABLE IF EXISTS blood_ops.fact_donor_day;
+DROP TABLE IF EXISTS blood_ops.meta_load_audit;
+DROP TABLE IF EXISTS blood_ops.meta_lineage;
+DROP TABLE IF EXISTS blood_ops.meta_column;
+DROP TABLE IF EXISTS blood_ops.meta_dataset;
+DROP TABLE IF EXISTS blood_ops.meta_source_system;
 
 DROP TABLE IF EXISTS blood_ops.dim_time;
 DROP TABLE IF EXISTS blood_ops.dim_date;
@@ -403,3 +408,73 @@ SELECT
     sum(toUInt64(eligible_donors)) AS eligible_donors
 FROM blood_ops.fact_donor_day
 GROUP BY event_date, source_id, bank_id;
+
+-- Metadata catalog tables
+CREATE TABLE IF NOT EXISTS blood_ops.meta_source_system (
+    source_code LowCardinality(String),
+    source_name String,
+    owner String,
+    is_active UInt8 DEFAULT 1,
+    created_at DateTime DEFAULT now(),
+    updated_at DateTime DEFAULT now()
+)
+ENGINE = ReplacingMergeTree(updated_at)
+ORDER BY source_code;
+
+CREATE TABLE IF NOT EXISTS blood_ops.meta_dataset (
+    dataset_name LowCardinality(String),
+    physical_table String,
+    dataset_type LowCardinality(String),
+    refresh_mode LowCardinality(String),
+    description String,
+    is_active UInt8 DEFAULT 1,
+    created_at DateTime DEFAULT now(),
+    updated_at DateTime DEFAULT now()
+)
+ENGINE = ReplacingMergeTree(updated_at)
+ORDER BY dataset_name;
+
+CREATE TABLE IF NOT EXISTS blood_ops.meta_column (
+    dataset_name LowCardinality(String),
+    column_name String,
+    data_type String,
+    is_nullable UInt8,
+    business_definition String,
+    source_system LowCardinality(String),
+    created_at DateTime DEFAULT now(),
+    updated_at DateTime DEFAULT now()
+)
+ENGINE = ReplacingMergeTree(updated_at)
+ORDER BY (dataset_name, column_name);
+
+CREATE TABLE IF NOT EXISTS blood_ops.meta_lineage (
+    target_dataset LowCardinality(String),
+    target_column String,
+    source_system LowCardinality(String),
+    source_dataset String,
+    source_column String,
+    transform_rule String,
+    is_active UInt8 DEFAULT 1,
+    created_at DateTime DEFAULT now(),
+    updated_at DateTime DEFAULT now()
+)
+ENGINE = ReplacingMergeTree(updated_at)
+ORDER BY (target_dataset, target_column, source_system, source_dataset, source_column);
+
+CREATE TABLE IF NOT EXISTS blood_ops.meta_load_audit (
+    batch_id String,
+    source_system LowCardinality(String),
+    target_system LowCardinality(String),
+    target_dataset String,
+    started_at DateTime,
+    ended_at DateTime,
+    duration_ms UInt64,
+    rows_read UInt64,
+    rows_written UInt64,
+    status LowCardinality(String),
+    message String,
+    created_at DateTime DEFAULT now()
+)
+ENGINE = MergeTree
+PARTITION BY toYYYYMM(started_at)
+ORDER BY (started_at, source_system, target_system, target_dataset, batch_id);
