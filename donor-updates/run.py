@@ -324,7 +324,7 @@ def insert_redcross_donors(conn, bank_ids, n):
 
     cur = conn.cursor()
     cur.executemany(
-        """INSERT INTO blood_donor
+        """INSERT INTO donor
            (bb_id, full_name, national_id, contact_number, address,
             blood_type, age, last_donation_date, created_at, updated_at)
            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
@@ -360,8 +360,8 @@ def insert_who_donors(conn, bank_ids, n):
 
     cur = conn.cursor()
     cur.executemany(
-        """INSERT INTO blood_donor
-           (bb_id, name, aadhaar_hash, phone, city, state, pincode,
+        """INSERT INTO donor
+           (bb_id, name, abha_hash, phone, city, state, pincode,
             blood_group, age, last_donated, created_at, updated_at)
            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
         batch,

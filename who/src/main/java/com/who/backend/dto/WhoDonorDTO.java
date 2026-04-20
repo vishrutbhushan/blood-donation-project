@@ -9,7 +9,7 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class WhoDonorDTO {
     private String name;
-    private String aadhaar_hash;
+    private String abha_hash;
     private String phone;
     private String city;
     private String state;

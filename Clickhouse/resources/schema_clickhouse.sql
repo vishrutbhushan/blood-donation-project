@@ -2,8 +2,8 @@ CREATE DATABASE IF NOT EXISTS blood_ops;
 
 /*
 Star schema aligned to source-of-truth systems:
-- Redcross: blood_bank, blood_inventory_transaction, blood_donor
-- WHO: blood_bank, blood_inventory_transaction, blood_donor
+- Redcross: blood_bank, inventory_transaction, donor
+- WHO: blood_bank, inventory_transaction, donor
 */
 
 DROP VIEW IF EXISTS blood_ops.mv_ingestion_hourly_to_fact;

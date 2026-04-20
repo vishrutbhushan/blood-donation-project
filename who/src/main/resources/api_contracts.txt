@@ -69,7 +69,7 @@ Expected response (200):
 [
   {
     "name": "<string>",
-    "aadhaar_hash": "<string>",
+    "abha_hash": "<string>",
     "phone": "<string>",
     "city": "<string>",
     "state": "<string>",
@@ -91,7 +91,7 @@ Expected response (200):
 [
   {
     "name": "<string>",
-    "aadhaar_hash": "<string>",
+    "abha_hash": "<string>",
     "phone": "<string>",
     "city": "<string>",
     "state": "<string>",

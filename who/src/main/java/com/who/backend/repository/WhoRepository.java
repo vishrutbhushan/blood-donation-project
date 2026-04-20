@@ -42,7 +42,7 @@ public class WhoRepository {
         + "FROM ("
         + "  SELECT DISTINCT ON (bi.bb_id, bi.blood_group, bi.component) "
         + "         bi.bb_id, bi.blood_group, bi.component, bi.running_balance_after, bi.event_timestamp "
-        + "  FROM blood_inventory_transaction bi "
+        + "  FROM inventory_transaction bi "
         + "  ORDER BY bi.bb_id, bi.blood_group, bi.component, bi.event_timestamp DESC, bi.transaction_id DESC"
         + ") x "
         + "ORDER BY x.bb_id, x.blood_group, x.component";
@@ -53,37 +53,37 @@ public class WhoRepository {
         + "FROM ("
         + "  SELECT DISTINCT ON (bi.bb_id, bi.blood_group, bi.component) "
         + "         bi.bb_id, bi.blood_group, bi.component, bi.running_balance_after, bi.event_timestamp "
-        + "  FROM blood_inventory_transaction bi "
+        + "  FROM inventory_transaction bi "
         + "  WHERE bi.event_timestamp >= to_timestamp(? / 1000.0) "
         + "  ORDER BY bi.bb_id, bi.blood_group, bi.component, bi.event_timestamp DESC, bi.transaction_id DESC"
         + ") x "
         + "ORDER BY x.bb_id, x.blood_group, x.component";
 
     private static final String SQL_DONORS_ALL =
-        "SELECT d.name, d.aadhaar_hash, d.phone, d.city, d.state, d.pincode, d.blood_group, d.age, "
+        "SELECT d.name, d.abha_hash, d.phone, d.city, d.state, d.pincode, d.blood_group, d.age, "
         + "to_char(d.last_donated, 'YYYY-MM-DD') AS last_donated, "
         + "(EXTRACT(EPOCH FROM d.created_at) * 1000)::bigint AS created_at, "
         + "(EXTRACT(EPOCH FROM d.updated_at) * 1000)::bigint AS updated_at, "
         + "false AS deleted "
-        + "FROM blood_donor d ORDER BY d.donor_id";
+        + "FROM donor d ORDER BY d.donor_id";
 
     private static final String SQL_DONORS_SINCE =
-        "SELECT d.name, d.aadhaar_hash, d.phone, d.city, d.state, d.pincode, d.blood_group, d.age, "
+        "SELECT d.name, d.abha_hash, d.phone, d.city, d.state, d.pincode, d.blood_group, d.age, "
         + "to_char(d.last_donated, 'YYYY-MM-DD') AS last_donated, "
         + "(EXTRACT(EPOCH FROM d.created_at) * 1000)::bigint AS created_at, "
         + "(EXTRACT(EPOCH FROM d.updated_at) * 1000)::bigint AS updated_at, "
         + "false AS deleted "
-        + "FROM blood_donor d "
+        + "FROM donor d "
         + "WHERE d.updated_at >= to_timestamp(? / 1000.0) "
         + "ORDER BY d.donor_id";
 
     private static final String SQL_DONORS_FILTERED =
-        "SELECT d.name, d.aadhaar_hash, d.phone, d.city, d.state, d.pincode, d.blood_group, d.age, "
+        "SELECT d.name, d.abha_hash, d.phone, d.city, d.state, d.pincode, d.blood_group, d.age, "
         + "to_char(d.last_donated, 'YYYY-MM-DD') AS last_donated, "
         + "(EXTRACT(EPOCH FROM d.created_at) * 1000)::bigint AS created_at, "
         + "(EXTRACT(EPOCH FROM d.updated_at) * 1000)::bigint AS updated_at, "
         + "false AS deleted "
-        + "FROM blood_donor d "
+        + "FROM donor d "
         + "WHERE (? IS NULL OR d.blood_group = ?) "
         + "AND (? IS NULL OR d.pincode = ?) "
         + "ORDER BY d.updated_at DESC LIMIT ?";
@@ -106,7 +106,7 @@ public class WhoRepository {
         + "to_char(d.last_donated, 'YYYY-MM-DD') AS last_donated_on, "
         + "NULL::text AS last_donated_blood_bank, to_char(d.updated_at, 'YYYY-MM-DD HH24:MI:SS') AS update_time, "
         + "false AS deleted "
-        + "FROM blood_donor d "
+        + "FROM donor d "
         + "WHERE d.updated_at >= to_timestamp(? / 1000.0) "
         + "AND d.updated_at < to_timestamp(? / 1000.0) "
         + "ORDER BY d.donor_id";
@@ -117,7 +117,7 @@ public class WhoRepository {
         + "t.units_delta, t.running_balance_after, to_char(t.expiry_date, 'YYYY-MM-DD') AS expiry_date, "
         + "to_char(t.event_timestamp, 'YYYY-MM-DD HH24:MI:SS') AS event_timestamp, "
         + "to_char(t.updated_at, 'YYYY-MM-DD HH24:MI:SS') AS update_time, false AS deleted "
-        + "FROM blood_inventory_transaction t "
+        + "FROM inventory_transaction t "
         + "WHERE t.event_timestamp >= to_timestamp(? / 1000.0) "
         + "AND t.event_timestamp < to_timestamp(? / 1000.0) "
         + "ORDER BY t.transaction_id";

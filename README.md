@@ -125,8 +125,8 @@ Schema source files:
 Table inventory summary:
 
 - Primary PostgreSQL: `users`, `searches`, `requests`, `responses`, `blood_group_lookup`, `blood_component_lookup`
-- Redcross PostgreSQL: `blood_bank`, `blood_inventory_transaction`, `blood_donor`
-- WHO PostgreSQL: `blood_bank`, `blood_inventory_transaction`, `blood_donor`
+- Redcross PostgreSQL: `blood_bank`, `inventory_transaction`, `donor`
+- WHO PostgreSQL: `blood_bank`, `inventory_transaction`, `donor`
 - ClickHouse (`blood_ops`): `dim_source`, `dim_blood_group`, `dim_component`, `dim_location`, `dim_blood_bank`, `dim_donor`, `dim_date`, `dim_time`, `fact_inventory_transaction`, `fact_inventory_day`, `fact_donor_snapshot`, `fact_donor_day`, `fact_ingestion_event`, `source_ingestion_hourly_agg`
 
 Full table/column simple list is maintained in `SOURCE_OF_TRUTH.txt` (Section F).

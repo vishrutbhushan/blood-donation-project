@@ -441,9 +441,9 @@ public class ClickhouseLoader {
     private void seedDatasets() {
         sql("INSERT INTO blood_ops.meta_dataset (dataset_name, physical_table, source_system, is_active, created_at) VALUES "
             + "('redcross_blood_bank', 'redcross_db.blood_bank', 'redcross', 1, now()),"
-            + "('redcross_blood_donor', 'redcross_db.blood_donor', 'redcross', 1, now()),"
+            + "('redcross_blood_donor', 'redcross_db.donor', 'redcross', 1, now()),"
             + "('who_blood_bank', 'who_db.blood_bank', 'who', 1, now()),"
-            + "('who_blood_donor', 'who_db.blood_donor', 'who', 1, now()),"
+            + "('who_blood_donor', 'who_db.donor', 'who', 1, now()),"
             + "('dim_source', 'blood_ops.dim_source', 'etl', 1, now()),"
             + "('dim_location', 'blood_ops.dim_location', 'etl', 1, now()),"
             + "('dim_blood_bank', 'blood_ops.dim_blood_bank', 'etl', 1, now()),"

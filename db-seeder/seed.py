@@ -644,8 +644,8 @@ def write_preview_csv(preview_rows):
                     break
 
     take("blood_bank", 20)
-    take("blood_inventory_transaction", 40)
-    take("blood_donor", 40)
+    take("inventory_transaction", 40)
+    take("donor", 40)
 
     if len(rows) < CSV_PREVIEW_ROWS:
         for row in preview_rows:
@@ -730,7 +730,7 @@ def seed_redcross(conn, preview_rows):
             preview_record(
                 preview_rows,
                 source="RedCross",
-                entity_type="blood_inventory_transaction",
+                entity_type="inventory_transaction",
                 bank_id=bb_id,
                 record_id=txn["source_event_id"],
                 blood_group=txn["blood_group"],
@@ -744,7 +744,7 @@ def seed_redcross(conn, preview_rows):
 
     execute_values(
         cur,
-        """INSERT INTO blood_inventory_transaction
+        """INSERT INTO inventory_transaction
            (source_event_id, bb_id, donor_id, blood_group, component,
             transaction_type, units_delta, running_balance_after,
             expiry_date, event_timestamp, updated_at)
@@ -780,7 +780,7 @@ def seed_redcross(conn, preview_rows):
             preview_record(
                 preview_rows,
                 source="RedCross",
-                entity_type="blood_donor",
+                entity_type="donor",
                 bank_id=bb_id,
                 record_id=nat_id,
                 name=fname,
@@ -797,7 +797,7 @@ def seed_redcross(conn, preview_rows):
 
         execute_values(
             cur,
-            """INSERT INTO blood_donor
+            """INSERT INTO donor
                (bb_id, full_name, national_id, contact_number, address,
                 blood_type, age, last_donation_date, created_at, updated_at)
                VALUES %s""",
@@ -877,7 +877,7 @@ def seed_who(conn, preview_rows):
             preview_record(
                 preview_rows,
                 source="WHO",
-                entity_type="blood_inventory_transaction",
+                entity_type="inventory_transaction",
                 bank_id=bb_id,
                 record_id=txn["source_event_id"],
                 blood_group=txn["blood_group"],
@@ -891,7 +891,7 @@ def seed_who(conn, preview_rows):
 
     execute_values(
         cur,
-        """INSERT INTO blood_inventory_transaction
+        """INSERT INTO inventory_transaction
            (source_event_id, bb_id, donor_id, blood_group, component,
             transaction_type, units_delta, running_balance_after,
             expiry_date, event_timestamp, updated_at)
@@ -926,7 +926,7 @@ def seed_who(conn, preview_rows):
             preview_record(
                 preview_rows,
                 source="WHO",
-                entity_type="blood_donor",
+                entity_type="donor",
                 bank_id=bb_id,
                 record_id=a_hash,
                 name=fname,
@@ -942,8 +942,8 @@ def seed_who(conn, preview_rows):
 
         execute_values(
             cur,
-            """INSERT INTO blood_donor
-               (bb_id, name, aadhaar_hash, phone, city, state, pincode,
+            """INSERT INTO donor
+               (bb_id, name, abha_hash, phone, city, state, pincode,
                 blood_group, age, last_donated, created_at, updated_at)
                VALUES %s""",
             batch,

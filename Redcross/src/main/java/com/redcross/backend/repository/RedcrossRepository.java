@@ -42,7 +42,7 @@ public class RedcrossRepository {
         + "FROM ("
         + "  SELECT DISTINCT ON (bi.bb_id, bi.blood_group, bi.component) "
         + "         bi.bb_id, bi.blood_group, bi.component, bi.running_balance_after, bi.event_timestamp "
-        + "  FROM blood_inventory_transaction bi "
+        + "  FROM inventory_transaction bi "
         + "  ORDER BY bi.bb_id, bi.blood_group, bi.component, bi.event_timestamp DESC, bi.transaction_id DESC"
         + ") x "
         + "ORDER BY x.bb_id, x.blood_group, x.component";
@@ -53,7 +53,7 @@ public class RedcrossRepository {
         + "FROM ("
         + "  SELECT DISTINCT ON (bi.bb_id, bi.blood_group, bi.component) "
         + "         bi.bb_id, bi.blood_group, bi.component, bi.running_balance_after, bi.event_timestamp "
-        + "  FROM blood_inventory_transaction bi "
+        + "  FROM inventory_transaction bi "
         + "  WHERE bi.event_timestamp >= to_timestamp(? / 1000.0) "
         + "  ORDER BY bi.bb_id, bi.blood_group, bi.component, bi.event_timestamp DESC, bi.transaction_id DESC"
         + ") x "
@@ -65,7 +65,7 @@ public class RedcrossRepository {
         + "(EXTRACT(EPOCH FROM d.created_at) * 1000)::bigint AS created_at, "
         + "(EXTRACT(EPOCH FROM d.updated_at) * 1000)::bigint AS updated_at, "
         + "false AS deleted "
-        + "FROM blood_donor d ORDER BY d.donor_id";
+        + "FROM donor d ORDER BY d.donor_id";
 
     private static final String SQL_PEOPLE_SINCE =
         "SELECT d.full_name, d.national_id, d.contact_number, d.address, d.blood_type, d.age, "
@@ -73,7 +73,7 @@ public class RedcrossRepository {
         + "(EXTRACT(EPOCH FROM d.created_at) * 1000)::bigint AS created_at, "
         + "(EXTRACT(EPOCH FROM d.updated_at) * 1000)::bigint AS updated_at, "
         + "false AS deleted "
-        + "FROM blood_donor d "
+        + "FROM donor d "
         + "WHERE d.updated_at >= to_timestamp(? / 1000.0) "
         + "ORDER BY d.donor_id";
 
@@ -83,7 +83,7 @@ public class RedcrossRepository {
         + "(EXTRACT(EPOCH FROM d.created_at) * 1000)::bigint AS created_at, "
         + "(EXTRACT(EPOCH FROM d.updated_at) * 1000)::bigint AS updated_at, "
         + "b.postal_code AS pincode, false AS deleted "
-        + "FROM blood_donor d "
+        + "FROM donor d "
         + "JOIN blood_bank b ON b.bb_id = d.bb_id "
         + "WHERE (? IS NULL OR d.blood_type = ?) "
         + "AND (? IS NULL OR b.postal_code = ?) "
@@ -108,7 +108,7 @@ public class RedcrossRepository {
         + "CAST(d.bb_id AS text) AS bank_id, to_char(d.last_donation_date, 'YYYY-MM-DD') AS last_donated_on, "
         + "NULL::text AS last_donated_blood_bank, to_char(d.updated_at, 'YYYY-MM-DD HH24:MI:SS') AS update_time, "
         + "false AS deleted "
-        + "FROM blood_donor d "
+        + "FROM donor d "
         + "JOIN blood_bank b ON b.bb_id = d.bb_id "
         + "WHERE d.updated_at >= to_timestamp(? / 1000.0) "
         + "AND d.updated_at < to_timestamp(? / 1000.0) "
@@ -120,7 +120,7 @@ public class RedcrossRepository {
         + "t.units_delta, t.running_balance_after, to_char(t.expiry_date, 'YYYY-MM-DD') AS expiry_date, "
         + "to_char(t.event_timestamp, 'YYYY-MM-DD HH24:MI:SS') AS event_timestamp, "
         + "to_char(t.updated_at, 'YYYY-MM-DD HH24:MI:SS') AS update_time, false AS deleted "
-        + "FROM blood_inventory_transaction t "
+        + "FROM inventory_transaction t "
         + "WHERE t.event_timestamp >= to_timestamp(? / 1000.0) "
         + "AND t.event_timestamp < to_timestamp(? / 1000.0) "
         + "ORDER BY t.transaction_id";

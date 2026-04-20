@@ -153,13 +153,13 @@ PRIMARY POSTGRESQL (`backend/src/main/resources/schema.sql`)
 
 REDCROSS POSTGRESQL (`Redcross/src/main/resources/sourcetables.sql`)
 - blood_bank: bb_id, name, category, contact_number, email, full_address, postal_code, created_at, updated_at
-- blood_inventory_transaction: transaction_id, source_event_id, bb_id, donor_id, blood_group, component, transaction_type, units_delta, running_balance_after, expiry_date, event_timestamp, created_at, updated_at
-- blood_donor: donor_id, bb_id, full_name, national_id, contact_number, address, blood_type, age, last_donation_date, created_at, updated_at
+- inventory_transaction: transaction_id, source_event_id, bb_id, donor_id, blood_group, component, transaction_type, units_delta, running_balance_after, expiry_date, event_timestamp, created_at, updated_at
+- donor: donor_id, bb_id, full_name, national_id, contact_number, address, blood_type, age, last_donation_date, created_at, updated_at
 
 WHO POSTGRESQL (`who/src/main/resources/source_coder.sql`)
 - blood_bank: bb_id, name, category, phone, email, street, city, state, pincode, created_at, updated_at
-- blood_inventory_transaction: transaction_id, source_event_id, bb_id, donor_id, blood_group, component, transaction_type, units_delta, running_balance_after, expiry_date, event_timestamp, created_at, updated_at
-- blood_donor: donor_id, bb_id, name, aadhaar_hash, phone, city, state, pincode, blood_group, age, last_donated, created_at, updated_at
+- inventory_transaction: transaction_id, source_event_id, bb_id, donor_id, blood_group, component, transaction_type, units_delta, running_balance_after, expiry_date, event_timestamp, created_at, updated_at
+- donor: donor_id, bb_id, name, abha_hash, phone, city, state, pincode, blood_group, age, last_donated, created_at, updated_at
 
 CLICKHOUSE (`Clickhouse/resources/schema_clickhouse.sql`)
 - blood_ops.dim_source: source_id, source_code, source_name, is_active, updated_at
