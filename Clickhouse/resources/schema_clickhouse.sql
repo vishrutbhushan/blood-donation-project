@@ -7,9 +7,21 @@ Star schema aligned to source-of-truth systems:
 */
 
 DROP VIEW IF EXISTS blood_ops.mv_ingestion_hourly_to_fact;
+DROP VIEW IF EXISTS blood_ops.mv_inventory_1w_day;
+DROP VIEW IF EXISTS blood_ops.mv_inventory_2w_day_source;
+DROP VIEW IF EXISTS blood_ops.mv_inventory_3w_day_source_bank;
+DROP VIEW IF EXISTS blood_ops.mv_donor_1w_day;
+DROP VIEW IF EXISTS blood_ops.mv_donor_2w_day_source;
+DROP VIEW IF EXISTS blood_ops.mv_donor_3w_day_source_bank;
 
 DROP TABLE IF EXISTS blood_ops.fact_ingestion_event;
 DROP TABLE IF EXISTS blood_ops.source_ingestion_hourly_agg;
+DROP TABLE IF EXISTS blood_ops.agg_inventory_1w_day;
+DROP TABLE IF EXISTS blood_ops.agg_inventory_2w_day_source;
+DROP TABLE IF EXISTS blood_ops.agg_inventory_3w_day_source_bank;
+DROP TABLE IF EXISTS blood_ops.agg_donor_1w_day;
+DROP TABLE IF EXISTS blood_ops.agg_donor_2w_day_source;
+DROP TABLE IF EXISTS blood_ops.agg_donor_3w_day_source_bank;
 DROP TABLE IF EXISTS blood_ops.fact_donor_snapshot;
 DROP TABLE IF EXISTS blood_ops.fact_inventory_day;
 DROP TABLE IF EXISTS blood_ops.fact_inventory_transaction;
@@ -239,3 +251,155 @@ SELECT
     sum(record_count) AS total_count
 FROM blood_ops.source_ingestion_hourly_agg
 GROUP BY event_time_id, event_date_id, source_id, api_name, record_type;
+
+-- 1-way, 2-way, 3-way inventory aggregates
+CREATE TABLE IF NOT EXISTS blood_ops.agg_inventory_1w_day (
+    event_date Date,
+    inflow_units Int64,
+    outflow_units Int64,
+    adjustment_units Int64,
+    closing_units Int64,
+    donation_events UInt64,
+    withdrawal_events UInt64
+)
+ENGINE = SummingMergeTree
+PARTITION BY toYYYYMM(event_date)
+ORDER BY event_date;
+
+CREATE MATERIALIZED VIEW IF NOT EXISTS blood_ops.mv_inventory_1w_day
+TO blood_ops.agg_inventory_1w_day
+AS
+SELECT
+    event_date,
+    sum(toInt64(inflow_units)) AS inflow_units,
+    sum(toInt64(outflow_units)) AS outflow_units,
+    sum(toInt64(adjustment_units)) AS adjustment_units,
+    sum(toInt64(closing_balance_units)) AS closing_units,
+    sum(toUInt64(donation_events_count)) AS donation_events,
+    sum(toUInt64(withdrawal_events_count)) AS withdrawal_events
+FROM blood_ops.fact_inventory_day
+GROUP BY event_date;
+
+CREATE TABLE IF NOT EXISTS blood_ops.agg_inventory_2w_day_source (
+    event_date Date,
+    source_id UInt8,
+    inflow_units Int64,
+    outflow_units Int64,
+    adjustment_units Int64,
+    closing_units Int64,
+    donation_events UInt64,
+    withdrawal_events UInt64
+)
+ENGINE = SummingMergeTree
+PARTITION BY toYYYYMM(event_date)
+ORDER BY (event_date, source_id);
+
+CREATE MATERIALIZED VIEW IF NOT EXISTS blood_ops.mv_inventory_2w_day_source
+TO blood_ops.agg_inventory_2w_day_source
+AS
+SELECT
+    event_date,
+    source_id,
+    sum(toInt64(inflow_units)) AS inflow_units,
+    sum(toInt64(outflow_units)) AS outflow_units,
+    sum(toInt64(adjustment_units)) AS adjustment_units,
+    sum(toInt64(closing_balance_units)) AS closing_units,
+    sum(toUInt64(donation_events_count)) AS donation_events,
+    sum(toUInt64(withdrawal_events_count)) AS withdrawal_events
+FROM blood_ops.fact_inventory_day
+GROUP BY event_date, source_id;
+
+CREATE TABLE IF NOT EXISTS blood_ops.agg_inventory_3w_day_source_bank (
+    event_date Date,
+    source_id UInt8,
+    bank_id UInt64,
+    inflow_units Int64,
+    outflow_units Int64,
+    adjustment_units Int64,
+    closing_units Int64,
+    donation_events UInt64,
+    withdrawal_events UInt64
+)
+ENGINE = SummingMergeTree
+PARTITION BY toYYYYMM(event_date)
+ORDER BY (event_date, source_id, bank_id);
+
+CREATE MATERIALIZED VIEW IF NOT EXISTS blood_ops.mv_inventory_3w_day_source_bank
+TO blood_ops.agg_inventory_3w_day_source_bank
+AS
+SELECT
+    event_date,
+    source_id,
+    bank_id,
+    sum(toInt64(inflow_units)) AS inflow_units,
+    sum(toInt64(outflow_units)) AS outflow_units,
+    sum(toInt64(adjustment_units)) AS adjustment_units,
+    sum(toInt64(closing_balance_units)) AS closing_units,
+    sum(toUInt64(donation_events_count)) AS donation_events,
+    sum(toUInt64(withdrawal_events_count)) AS withdrawal_events
+FROM blood_ops.fact_inventory_day
+GROUP BY event_date, source_id, bank_id;
+
+-- 1-way, 2-way, 3-way donor aggregates
+CREATE TABLE IF NOT EXISTS blood_ops.agg_donor_1w_day (
+    event_date Date,
+    total_donors UInt64,
+    eligible_donors UInt64
+)
+ENGINE = SummingMergeTree
+PARTITION BY toYYYYMM(event_date)
+ORDER BY event_date;
+
+CREATE MATERIALIZED VIEW IF NOT EXISTS blood_ops.mv_donor_1w_day
+TO blood_ops.agg_donor_1w_day
+AS
+SELECT
+    event_date,
+    sum(toUInt64(total_donors)) AS total_donors,
+    sum(toUInt64(eligible_donors)) AS eligible_donors
+FROM blood_ops.fact_donor_day
+GROUP BY event_date;
+
+CREATE TABLE IF NOT EXISTS blood_ops.agg_donor_2w_day_source (
+    event_date Date,
+    source_id UInt8,
+    total_donors UInt64,
+    eligible_donors UInt64
+)
+ENGINE = SummingMergeTree
+PARTITION BY toYYYYMM(event_date)
+ORDER BY (event_date, source_id);
+
+CREATE MATERIALIZED VIEW IF NOT EXISTS blood_ops.mv_donor_2w_day_source
+TO blood_ops.agg_donor_2w_day_source
+AS
+SELECT
+    event_date,
+    source_id,
+    sum(toUInt64(total_donors)) AS total_donors,
+    sum(toUInt64(eligible_donors)) AS eligible_donors
+FROM blood_ops.fact_donor_day
+GROUP BY event_date, source_id;
+
+CREATE TABLE IF NOT EXISTS blood_ops.agg_donor_3w_day_source_bank (
+    event_date Date,
+    source_id UInt8,
+    bank_id UInt64,
+    total_donors UInt64,
+    eligible_donors UInt64
+)
+ENGINE = SummingMergeTree
+PARTITION BY toYYYYMM(event_date)
+ORDER BY (event_date, source_id, bank_id);
+
+CREATE MATERIALIZED VIEW IF NOT EXISTS blood_ops.mv_donor_3w_day_source_bank
+TO blood_ops.agg_donor_3w_day_source_bank
+AS
+SELECT
+    event_date,
+    source_id,
+    bank_id,
+    sum(toUInt64(total_donors)) AS total_donors,
+    sum(toUInt64(eligible_donors)) AS eligible_donors
+FROM blood_ops.fact_donor_day
+GROUP BY event_date, source_id, bank_id;
