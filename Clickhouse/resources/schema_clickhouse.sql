@@ -24,7 +24,6 @@ DROP TABLE IF EXISTS blood_ops.agg_donor_2w_day_source;
 DROP TABLE IF EXISTS blood_ops.agg_donor_3w_day_source_bank;
 DROP TABLE IF EXISTS blood_ops.fact_donor_snapshot;
 DROP TABLE IF EXISTS blood_ops.fact_inventory_day;
-DROP TABLE IF EXISTS blood_ops.fact_inventory_transaction;
 DROP TABLE IF EXISTS blood_ops.fact_donor_day;
 DROP TABLE IF EXISTS blood_ops.meta_load_audit;
 DROP TABLE IF EXISTS blood_ops.meta_lineage;
@@ -137,28 +136,6 @@ CREATE TABLE IF NOT EXISTS blood_ops.dim_time (
 )
 ENGINE = MergeTree
 ORDER BY time_id;
-
-CREATE TABLE IF NOT EXISTS blood_ops.fact_inventory_transaction (
-    source_transaction_id String,
-    source_event_id String,
-    source_id UInt8,
-    source_system LowCardinality(String),
-    bank_id UInt64,
-    donor_sk UInt64,
-    blood_group LowCardinality(String),
-    component LowCardinality(String),
-    transaction_type LowCardinality(String),
-    units_delta Int32,
-    running_balance_after Int32,
-    expiry_date Nullable(Date),
-    event_time DateTime,
-    is_deleted UInt8 DEFAULT 0,
-    ingested_at DateTime DEFAULT now(),
-    version UInt64
-)
-ENGINE = ReplacingMergeTree(version)
-PARTITION BY toYYYYMM(toDate(event_time))
-ORDER BY (source_id, source_transaction_id);
 
 CREATE TABLE IF NOT EXISTS blood_ops.fact_inventory_day (
     event_date Date,

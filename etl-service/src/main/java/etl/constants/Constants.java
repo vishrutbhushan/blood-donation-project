@@ -15,19 +15,32 @@ public final class Constants {
     public static final String DATA_DIR = "/data";
 
     public static final String KEY_LAST_SYNC = "last_sync";
+    public static final String KEY_BULK_DONE = "bulk_done";
+    public static final String KEY_ES_SYNC = "es_sync";
+    public static final int BULK_MAX_MONTHS = 13;
 
     public static final String OP_DELETE = "delete";
     public static final String OP_UPSERT = "upsert";
 
     public static final String WHO_BASE_URL = env("WHO_BASE_URL", "http://who-service:8082");
     public static final String WHO_INCREMENTAL_ENDPOINT = "/incremental";
+    public static final String WHO_INCREMENTAL_DAY_ENDPOINT = "/incremental/day";
     public static final String WHO_SINCE_PARAM = "since";
     public static final String WHO_UNTIL_PARAM = "until";
+    public static final String WHO_DATE_PARAM = "date";
+    public static final String WHO_INCREMENTAL_MONTH_ENDPOINT = "/incremental/month";
+    public static final String WHO_MONTH_PARAM = "month";
 
     public static final String REDCROSS_BASE_URL = env("REDCROSS_BASE_URL", "http://redcross-service:8081");
     public static final String REDCROSS_INCREMENTAL_ENDPOINT = "/incremental";
+    public static final String REDCROSS_INCREMENTAL_DAY_ENDPOINT = "/incremental/day";
     public static final String REDCROSS_SINCE_PARAM = "since";
     public static final String REDCROSS_UNTIL_PARAM = "until";
+    public static final String REDCROSS_DATE_PARAM = "date";
+    public static final String REDCROSS_INCREMENTAL_MONTH_ENDPOINT = "/incremental/month";
+    public static final String REDCROSS_MONTH_PARAM = "month";
+
+    public static final String ETL_ZONE = env("ETL_ZONE", "Asia/Kolkata");
 
     public static final String CLICKHOUSE_URL = env("CLICKHOUSE_URL", "http://clickhouse:8123");
     public static final String CLICKHOUSE_USER = env("CLICKHOUSE_USER", "default");

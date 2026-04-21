@@ -2,6 +2,8 @@ package etl.extract.who;
 
 import etl.constants.Constants;
 import etl.util.JsonUtil;
+import java.time.LocalDate;
+import java.time.YearMonth;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
@@ -22,6 +24,26 @@ public class WhoExtractor {
         String body = restClient.get().uri(url).retrieve().body(String.class);
         if (body == null) {
             throw new RuntimeException("who api returned empty body");
+        }
+        return jsonUtil.parse(body);
+    }
+
+    public Object fetchByDate(LocalDate date) {
+        String url = Constants.WHO_BASE_URL + Constants.WHO_INCREMENTAL_DAY_ENDPOINT
+                + "?" + Constants.WHO_DATE_PARAM + "=" + date;
+        String body = restClient.get().uri(url).retrieve().body(String.class);
+        if (body == null) {
+            throw new RuntimeException("who day api returned empty body");
+        }
+        return jsonUtil.parse(body);
+    }
+
+    public Object fetchByMonth(YearMonth month) {
+        String url = Constants.WHO_BASE_URL + Constants.WHO_INCREMENTAL_MONTH_ENDPOINT
+                + "?" + Constants.WHO_MONTH_PARAM + "=" + month;
+        String body = restClient.get().uri(url).retrieve().body(String.class);
+        if (body == null) {
+            throw new RuntimeException("who month api returned empty body");
         }
         return jsonUtil.parse(body);
     }

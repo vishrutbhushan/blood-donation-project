@@ -5,6 +5,8 @@ import etl.extract.redcross.RedcrossExtractor;
 import etl.model.EtlBatch;
 import etl.transform.redcross.RedcrossTransformPipeline;
 import etl.util.PincodeGeoMap;
+import java.time.LocalDate;
+import java.time.YearMonth;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -25,6 +27,16 @@ public class RedcrossSourceHandler implements SourceHandler {
     @Override
     public Object fetchIncremental(long fromTs, long toTs) {
         return extractor.fetchIncremental(fromTs, toTs);
+    }
+
+    @Override
+    public Object fetchByDate(LocalDate date) {
+        return extractor.fetchByDate(date);
+    }
+
+    @Override
+    public Object fetchByMonth(YearMonth month) {
+        return extractor.fetchByMonth(month);
     }
 
     @Override

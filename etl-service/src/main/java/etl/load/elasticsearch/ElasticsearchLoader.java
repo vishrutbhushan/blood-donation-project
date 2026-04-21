@@ -119,13 +119,6 @@ public class ElasticsearchLoader {
 
             List<InventoryTransaction> bankInventory = inventoryByBank.getOrDefault(bankKey, List.of());
             if (bankInventory.isEmpty()) {
-                Map<String, Object> doc = toBankInventoryDoc(b, "UNKNOWN", "UNKNOWN", 0, str(b.getUpdatedAt()));
-                elastic.post()
-                    .uri("/{index}/_doc/{id}", Constants.ELASTIC_INDEX_BANKS, bankInventoryDocId(b.getSource(), b.getBankId(), "UNKNOWN", "UNKNOWN"))
-                    .contentType(Objects.requireNonNull(MediaType.APPLICATION_JSON))
-                    .body(Objects.requireNonNull(jsonUtil.toJson(doc)))
-                    .retrieve()
-                    .toBodilessEntity();
                 continue;
             }
 
@@ -133,7 +126,7 @@ public class ElasticsearchLoader {
                 String bloodGroup = str(txn.getBloodGroup());
                 String component = str(txn.getComponent());
                 int unitsAvailable = txn.getRunningBalanceAfter() == null ? 0 : txn.getRunningBalanceAfter();
-                String updatedAt = str(txn.getEventTimestamp()).isBlank() ? str(b.getUpdatedAt()) : str(txn.getEventTimestamp());
+                String updatedAt = str(txn.getUpdatedAt()).isBlank() ? str(b.getUpdatedAt()) : str(txn.getUpdatedAt());
 
                 Map<String, Object> doc = toBankInventoryDoc(b, bloodGroup, component, unitsAvailable, updatedAt);
                 elastic.post()
