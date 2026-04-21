@@ -75,8 +75,8 @@ public class RequestDispatchService {
                     sendWhatsAppToDonor(
                         donor.getPhone(),
                         request.getBloodGroup(),
-                        request.getComponent(),
-                        String.valueOf(request.getRequestId())
+                        request.getSearch().getHospitalName(),
+                        request.getSearch().getHospitalPincode()
                     );
                 } catch (Exception e) {
                     System.err.println("WhatsApp failed for donor "
@@ -93,15 +93,14 @@ public class RequestDispatchService {
     }
 
     private void sendWhatsAppToDonor(String donorPhone, String bloodGroup,
-                                      String component, String reqCode) {
+                                      String hospitalName, String pincode) {
+        String safeHospitalName = hospitalName == null || hospitalName.isBlank() ? "Hospital" : hospitalName.trim();
+        String safePincode = pincode == null ? "" : pincode.trim();
         Message.creator(
             new PhoneNumber("whatsapp:+91" + donorPhone),
             new PhoneNumber("whatsapp:" + twilioWhatsappNumber),
-            "HEMO-CONNECT ALERT: Urgent blood request near you.\n" +
-            "Blood Group: " + bloodGroup + "\n" +
-            "Component: " + component + "\n" +
-            "Request ID: " + reqCode + "\n" +
-            "Reply YES to share your contact or NO to decline."
+            "Urgent " + bloodGroup + " required at " + safeHospitalName + " " + safePincode + ". " +
+            "Reply YES to share contact details"
         ).create();
 
         System.out.println("WhatsApp sent to +91" + donorPhone);

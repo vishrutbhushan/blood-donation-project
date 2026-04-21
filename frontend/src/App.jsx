@@ -303,6 +303,10 @@ export default function App() {
       dispatch(setError('Active request exists'));
       return;
     }
+    if (!donorForm.hospitalName.trim() || !/^\d{6}$/.test(donorForm.pincode.trim())) {
+      dispatch(setError('Hospital name and valid pincode are required'));
+      return;
+    }
 
     dispatch(setLoading(true));
     dispatch(clearStatus());
@@ -339,8 +343,9 @@ export default function App() {
         const createdSearch = await apiRequest(`/api/backend/searches/${userId}`, {
           method: 'POST',
           body: JSON.stringify({
-            hospitalPincode: form.hospitalPincode.trim(),
-            bloodGroup: form.bloodGroup,
+            hospitalName: donorForm.hospitalName.trim(),
+            hospitalPincode: donorForm.pincode.trim(),
+            bloodGroup: donorForm.bloodGroup,
             bloodComponent: form.bloodComponent,
           }),
         });
@@ -516,6 +521,7 @@ export default function App() {
           <Box className="stack-wrap">
             <Paper className="panel" variant="outlined" elevation={0}>
               <Box className="form-grid">
+                <TextField label="Hospital Name" value={donorForm.hospitalName} onChange={(e) => updateDonorSearchForm('hospitalName', e.target.value)} />
                 <FormControl>
                   <InputLabel>Blood Group</InputLabel>
                   <Select value={donorForm.bloodGroup} label="Blood Group" onChange={(e) => updateDonorSearchForm('bloodGroup', e.target.value)}>
