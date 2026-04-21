@@ -14,20 +14,21 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
 @Component
 public class ClickhouseLoader {
-    private static final Logger logger = LoggerFactory.getLogger(ClickhouseLoader.class);
     private final RestClient clickhouse;
     private final Set<String> seededSources = new HashSet<>();
     private final Set<String> seededBloodGroups = new HashSet<>();
@@ -42,27 +43,6 @@ public class ClickhouseLoader {
 
     public void ensureAnalyticsTables() {
         sql("CREATE DATABASE IF NOT EXISTS blood_ops");
-
-        sql("CREATE TABLE IF NOT EXISTS blood_ops.fact_inventory_transaction ("
-            + "source_transaction_id String,"
-            + "source_event_id String,"
-            + "source_id UInt8,"
-            + "source_system LowCardinality(String),"
-            + "bank_id UInt64,"
-            + "donor_sk UInt64,"
-            + "blood_group LowCardinality(String),"
-            + "component LowCardinality(String),"
-            + "transaction_type LowCardinality(String),"
-            + "units_delta Int32,"
-            + "running_balance_after Int32,"
-            + "expiry_date Nullable(Date),"
-            + "event_time DateTime,"
-            + "is_deleted UInt8 DEFAULT 0,"
-            + "ingested_at DateTime DEFAULT now(),"
-            + "version UInt64"
-            + ") ENGINE = ReplacingMergeTree(version) "
-            + "PARTITION BY toYYYYMM(toDate(event_time)) "
-            + "ORDER BY (source_id, source_transaction_id)");
 
         sql("CREATE TABLE IF NOT EXISTS blood_ops.fact_inventory_day ("
             + "event_date Date,"
@@ -252,79 +232,97 @@ public class ClickhouseLoader {
         }
     }
 
-    public void loadInventoryTransactions(List<InventoryTransaction> transactions) {
+    public void loadInventoryDay(LocalDate businessDate, List<InventoryTransaction> transactions) {
+        String day = businessDate.toString();
+        sql("ALTER TABLE blood_ops.fact_inventory_day DELETE WHERE event_date = toDate('" + esc(day) + "')");
+
         if (transactions == null || transactions.isEmpty()) {
             return;
         }
 
-        for (InventoryTransaction t : transactions) {
-            int sourceId = sourceId(t.getSource());
+        Map<String, List<InventoryTransaction>> grouped = new HashMap<>();
+        for (InventoryTransaction transaction : transactions) {
+            if (transaction == null || isDelete(transaction.getOp())) {
+                continue;
+            }
+            if (transaction.getSource() == null || transaction.getBankId() == null || transaction.getBloodGroup() == null || transaction.getComponent() == null) {
+                continue;
+            }
+            LocalDate eventDay = TimeUtil.toDateTime(transaction.getEventTimestamp()).toLocalDate();
+            if (!businessDate.equals(eventDay)) {
+                continue;
+            }
+            String key = transaction.getSource() + ":" + transaction.getBankId() + ":" + transaction.getBloodGroup() + ":" + transaction.getComponent();
+            grouped.computeIfAbsent(key, k -> new ArrayList<>()).add(transaction);
+        }
+
+        long version = System.currentTimeMillis();
+        for (List<InventoryTransaction> group : grouped.values()) {
+            group.sort(Comparator.comparing(txn -> TimeUtil.toDateTime(txn.getEventTimestamp())));
+            InventoryTransaction first = group.get(0);
+            InventoryTransaction last = group.get(group.size() - 1);
+
+            int inflowUnits = 0;
+            int outflowUnits = 0;
+            int adjustmentUnits = 0;
+            int donationEvents = 0;
+            int withdrawalEvents = 0;
+
+            for (InventoryTransaction txn : group) {
+                int delta = txn.getUnitsDelta() == null ? 0 : txn.getUnitsDelta();
+                String type = txn.getTransactionType() == null ? "" : txn.getTransactionType().trim().toUpperCase(Locale.ROOT);
+                if ("INFLOW".equals(type)) {
+                    if (delta > 0) {
+                        inflowUnits += delta;
+                    }
+                    donationEvents += 1;
+                } else if ("OUTFLOW".equals(type)) {
+                    if (delta < 0) {
+                        outflowUnits += Math.abs(delta);
+                    }
+                    withdrawalEvents += 1;
+                } else if ("ADJUSTMENT".equals(type)) {
+                    adjustmentUnits += delta;
+                }
+            }
+
+            int firstDelta = first.getUnitsDelta() == null ? 0 : first.getUnitsDelta();
+            int firstBalance = first.getRunningBalanceAfter() == null ? 0 : first.getRunningBalanceAfter();
+            int lastBalance = last.getRunningBalanceAfter() == null ? 0 : last.getRunningBalanceAfter();
+            int openingBalanceUnits = firstBalance - firstDelta;
+
+            int sourceId = sourceId(first.getSource());
             if (sourceId == 0) {
                 continue;
             }
-            seedSource(sourceId, t.getSource());
+            seedSource(sourceId, first.getSource());
+            long bankId = bankId(first.getSource(), first.getBankId());
 
-            long bankId = bankId(t.getSource(), t.getBankId());
-            long donorSk = t.getDonorId() == null || t.getDonorId().isBlank() ? 0 : donorSk(t.getSource(), t.getDonorId());
-            int unitsDelta = t.getUnitsDelta() == null ? 0 : t.getUnitsDelta();
-            int runningBalance = t.getRunningBalanceAfter() == null ? 0 : t.getRunningBalanceAfter();
-            long version = TimeUtil.toDateTime(orElse(t.getUpdatedAt(), t.getEventTimestamp())).toInstant(ZoneOffset.UTC).toEpochMilli();
-            int isDeleted = isDelete(t.getOp()) ? 1 : 0;
-
-            sql("INSERT INTO blood_ops.fact_inventory_transaction "
-                + "(source_transaction_id, source_event_id, source_id, source_system, bank_id, donor_sk, blood_group, component, "
-                + "transaction_type, units_delta, running_balance_after, expiry_date, event_time, is_deleted, version) VALUES ("
-                + q(t.getTransactionId()) + ","
-                + q(t.getSourceEventId()) + ","
+            sql("INSERT INTO blood_ops.fact_inventory_day "
+                + "(event_date, source_id, source_system, bank_id, blood_group, component, opening_balance_units, inflow_units, outflow_units, "
+                + "adjustment_units, closing_balance_units, donation_events_count, withdrawal_events_count, version) VALUES ("
+                + "toDate('" + esc(day) + "'),"
                 + sourceId + ","
-                + q(t.getSource()) + ","
+                + q(first.getSource()) + ","
                 + bankId + ","
-                + donorSk + ","
-                + q(normalizeBloodGroup(t.getBloodGroup())) + ","
-                + q(t.getComponent()) + ","
-                + q(t.getTransactionType()) + ","
-                + unitsDelta + ","
-                + runningBalance + ","
-                + nullableDate(t.getExpiryDate()) + ","
-                + dt(t.getEventTimestamp()) + ","
-                + isDeleted + ","
+                + q(normalizeBloodGroup(first.getBloodGroup())) + ","
+                + q(first.getComponent()) + ","
+                + openingBalanceUnits + ","
+                + inflowUnits + ","
+                + outflowUnits + ","
+                + adjustmentUnits + ","
+                + lastBalance + ","
+                + donationEvents + ","
+                + withdrawalEvents + ","
                 + version + ")");
-
-            ingestCounter(orElse(t.getUpdatedAt(), t.getEventTimestamp()), t.getSource(), "incremental", "inventory_transaction", 1);
         }
-    }
-
-    public void aggregateInventoryDay(LocalDate businessDate) {
-        String day = businessDate.toString();
-        long version = System.currentTimeMillis();
-
-        sql("INSERT INTO blood_ops.fact_inventory_day "
-            + "(event_date, source_id, source_system, bank_id, blood_group, component, opening_balance_units, inflow_units, outflow_units, "
-            + "adjustment_units, closing_balance_units, donation_events_count, withdrawal_events_count, version) "
-            + "SELECT "
-            + "toDate('" + esc(day) + "') AS event_date, "
-            + "source_id, "
-            + "source_system, "
-            + "bank_id, "
-            + "blood_group, "
-            + "component, "
-            + "toInt32(argMin(running_balance_after - units_delta, event_time)) AS opening_balance_units, "
-            + "toInt32(sumIf(units_delta, transaction_type = 'INFLOW' AND units_delta > 0)) AS inflow_units, "
-            + "toInt32(abs(sumIf(units_delta, transaction_type = 'OUTFLOW' AND units_delta < 0))) AS outflow_units, "
-            + "toInt32(sumIf(units_delta, transaction_type = 'ADJUSTMENT')) AS adjustment_units, "
-            + "toInt32(argMax(running_balance_after, event_time)) AS closing_balance_units, "
-            + "toUInt32(countIf(transaction_type = 'INFLOW')) AS donation_events_count, "
-            + "toUInt32(countIf(transaction_type = 'OUTFLOW')) AS withdrawal_events_count, "
-            + version + " AS version "
-            + "FROM blood_ops.fact_inventory_transaction "
-            + "WHERE toDate(event_time) = toDate('" + esc(day) + "') "
-            + "AND is_deleted = 0 "
-            + "GROUP BY source_id, source_system, bank_id, blood_group, component");
     }
 
     public void aggregateDonorDay(LocalDate businessDate) {
         String day = businessDate.toString();
         long version = System.currentTimeMillis();
+
+        sql("ALTER TABLE blood_ops.fact_donor_day DELETE WHERE event_date = toDate('" + esc(day) + "')");
 
         sql("INSERT INTO blood_ops.fact_donor_day "
             + "(event_date, source_id, source_system, bank_id, blood_group_id, total_donors, eligible_donors, version) "
@@ -341,60 +339,6 @@ public class ClickhouseLoader {
             + "WHERE toDate(snapshot_updated_at) = toDate('" + esc(day) + "') "
             + "AND is_deleted = 0 "
             + "GROUP BY source_id, source_system, bank_id, blood_group_id");
-    }
-
-    public void batchAggregateInventoryDays() {
-        String datesQuery = "SELECT DISTINCT toDate(event_time) as day FROM blood_ops.fact_inventory_transaction WHERE is_deleted = 0";
-        try {
-            String result = clickhouse.post()
-                .contentType(Objects.requireNonNull(MediaType.TEXT_PLAIN))
-                .body(Objects.requireNonNull(datesQuery, "query"))
-                .retrieve()
-                .body(String.class);
-            
-            if (result != null && !result.isBlank()) {
-                String[] lines = result.trim().split("\n");
-                for (String line : lines) {
-                    if (!line.isBlank()) {
-                        try {
-                            LocalDate day = LocalDate.parse(line.trim());
-                            aggregateInventoryDay(day);
-                        } catch (Exception e) {
-                            logger.warn("Failed to parse date {} for inventory aggregation: {}", line, e.getMessage());
-                        }
-                    }
-                }
-            }
-        } catch (Exception e) {
-            logger.warn("Failed to batch aggregate inventory days: {}", e.getMessage());
-        }
-    }
-
-    public void batchAggregateDonorDays() {
-        String datesQuery = "SELECT DISTINCT toDate(snapshot_updated_at) as day FROM blood_ops.fact_donor_snapshot WHERE is_deleted = 0";
-        try {
-            String result = clickhouse.post()
-                .contentType(Objects.requireNonNull(MediaType.TEXT_PLAIN))
-                .body(Objects.requireNonNull(datesQuery, "query"))
-                .retrieve()
-                .body(String.class);
-            
-            if (result != null && !result.isBlank()) {
-                String[] lines = result.trim().split("\n");
-                for (String line : lines) {
-                    if (!line.isBlank()) {
-                        try {
-                            LocalDate day = LocalDate.parse(line.trim());
-                            aggregateDonorDay(day);
-                        } catch (Exception e) {
-                            logger.warn("Failed to parse date {} for donor aggregation: {}", line, e.getMessage());
-                        }
-                    }
-                }
-            }
-        } catch (Exception e) {
-            logger.warn("Failed to batch aggregate donor days: {}", e.getMessage());
-        }
     }
 
     public void recordLoadAudit(
@@ -439,7 +383,6 @@ public class ClickhouseLoader {
             + "('dim_location', 'blood_ops.dim_location', 'etl', 1, now()),"
             + "('dim_blood_bank', 'blood_ops.dim_blood_bank', 'etl', 1, now()),"
             + "('dim_donor', 'blood_ops.dim_donor', 'etl', 1, now()),"
-            + "('fact_inventory_transaction', 'blood_ops.fact_inventory_transaction', 'etl', 1, now()),"
             + "('fact_inventory_day', 'blood_ops.fact_inventory_day', 'etl', 1, now()),"
             + "('fact_donor_snapshot', 'blood_ops.fact_donor_snapshot', 'etl', 1, now()),"
             + "('fact_donor_day', 'blood_ops.fact_donor_day', 'etl', 1, now()),"
@@ -598,13 +541,6 @@ public class ClickhouseLoader {
     private String dateOrDefault(String dateText) {
         if (dateText == null || dateText.isBlank()) {
             return "toDate('1970-01-01')";
-        }
-        return "toDate('" + esc(dateText) + "')";
-    }
-
-    private String nullableDate(String dateText) {
-        if (dateText == null || dateText.isBlank()) {
-            return "NULL";
         }
         return "toDate('" + esc(dateText) + "')";
     }

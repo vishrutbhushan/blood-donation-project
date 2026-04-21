@@ -57,7 +57,13 @@ public class EtlBatchAccumulator {
 
             String inventoryKey = transaction.getBankId() + ":" + transaction.getBloodGroup() + ":" + transaction.getComponent();
             InventoryTransaction existing = latestInventory.get(inventoryKey);
-            if (existing == null || !TimeUtil.toDateTime(transaction.getEventTimestamp()).isBefore(TimeUtil.toDateTime(existing.getEventTimestamp()))) {
+            String transactionTs = transaction.getUpdatedAt() == null || transaction.getUpdatedAt().isBlank()
+                ? transaction.getEventTimestamp()
+                : transaction.getUpdatedAt();
+            String existingTs = existing == null || existing.getUpdatedAt() == null || existing.getUpdatedAt().isBlank()
+                ? (existing == null ? null : existing.getEventTimestamp())
+                : existing.getUpdatedAt();
+            if (existing == null || !TimeUtil.toDateTime(transactionTs).isBefore(TimeUtil.toDateTime(existingTs))) {
                 latestInventory.put(inventoryKey, transaction);
             }
         }

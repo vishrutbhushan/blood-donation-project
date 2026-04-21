@@ -24,7 +24,7 @@
     {
       "datasource": {
         "type": "grafana-clickhouse-datasource",
-        "uid": "PDEE91DDB90597936"
+        "uid": "clickhouse-main"
       },
       "fieldConfig": {
         "defaults": {
@@ -132,7 +132,7 @@
         {
           "datasource": {
             "type": "grafana-clickhouse-datasource",
-            "uid": "PDEE91DDB90597936"
+            "uid": "clickhouse-main"
           },
           "editorType": "sql",
           "format": 1,
@@ -158,7 +158,7 @@
     {
       "datasource": {
         "type": "grafana-clickhouse-datasource",
-        "uid": "PDEE91DDB90597936"
+        "uid": "clickhouse-main"
       },
       "fieldConfig": {
         "defaults": {
@@ -235,7 +235,7 @@
         {
           "datasource": {
             "type": "grafana-clickhouse-datasource",
-            "uid": "PDEE91DDB90597936"
+            "uid": "clickhouse-main"
           },
           "editorType": "sql",
           "format": 1,
@@ -261,7 +261,7 @@
     {
       "datasource": {
         "type": "grafana-clickhouse-datasource",
-        "uid": "PDEE91DDB90597936"
+        "uid": "clickhouse-main"
       },
       "fieldConfig": {
         "defaults": {
@@ -340,7 +340,7 @@
         {
           "datasource": {
             "type": "grafana-clickhouse-datasource",
-            "uid": "PDEE91DDB90597936"
+            "uid": "clickhouse-main"
           },
           "editorType": "sql",
           "format": 1,
@@ -362,7 +362,7 @@
         {
           "datasource": {
             "type": "grafana-clickhouse-datasource",
-            "uid": "PDEE91DDB90597936"
+            "uid": "clickhouse-main"
           },
           "hide": false,
           "refId": "B"

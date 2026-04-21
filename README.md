@@ -107,11 +107,11 @@ ETL admin route:
 
 - Bulk load is manual trigger only.
 - Incremental scheduler is cron-based:
-	- Env key: `ETL_INCREMENTAL_CRON`
-	- Default: `0 0 0 * * *` (00:00 Asia/Kolkata)
-	- Time zone key: `ETL_INCREMENTAL_ZONE` (default `Asia/Kolkata`)
-
-Note: legacy `ETL_INCREMENTAL_INTERVAL_MS` exists in `.env` but current scheduler uses cron settings.
+	- ES incremental env key: `ETL_ES_CRON`
+	- ES incremental default: `0 */5 * * * *`
+	- ClickHouse incremental env key: `ETL_CH_CRON`
+	- ClickHouse incremental default: `0 0 0 * * *`
+	- Time zone env key: `ETL_ZONE` (default `Asia/Kolkata`)
 
 ## Data and Schemas
 
@@ -127,9 +127,9 @@ Table inventory summary:
 - Primary PostgreSQL: `users`, `searches`, `requests`, `responses`, `blood_group_lookup`, `blood_component_lookup`
 - Redcross PostgreSQL: `blood_bank`, `inventory_transaction`, `donor`
 - WHO PostgreSQL: `blood_bank`, `inventory_transaction`, `donor`
-- ClickHouse (`blood_ops`): `dim_source`, `dim_blood_group`, `dim_component`, `dim_location`, `dim_blood_bank`, `dim_donor`, `dim_date`, `dim_time`, `fact_inventory_transaction`, `fact_inventory_day`, `fact_donor_snapshot`, `fact_donor_day`, `fact_ingestion_event`, `source_ingestion_hourly_agg`
+- ClickHouse (`blood_ops`): `dim_source`, `dim_blood_group`, `dim_component`, `dim_location`, `dim_blood_bank`, `dim_donor`, `dim_date`, `dim_time`, `fact_inventory_day`, `fact_donor_snapshot`, `fact_donor_day`, `fact_ingestion_event`, `source_ingestion_hourly_agg`
 
-Full table/column simple list is maintained in `SOURCE_OF_TRUTH.txt` (Section F).
+Full table/column and dataflow mapping list is maintained in `SOURCE_OF_TRUTH.txt` (Sections E and H).
 
 ## E2E Runbook
 

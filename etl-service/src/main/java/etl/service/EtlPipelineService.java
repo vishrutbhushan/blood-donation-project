@@ -9,12 +9,20 @@ import etl.model.EtlBatch;
 import etl.model.InventoryTransaction;
 import etl.source.SourceHandler;
 import etl.util.PincodeGeoMap;
+import etl.util.TimeUtil;
+import java.time.LocalDate;
+import java.time.YearMonth;
+import java.time.ZoneId;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.TreeSet;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 @Service
+@Slf4j
 public class EtlPipelineService {
     private final PincodeGeoMap pincodeGeoMap;
     private final ClickhouseLoader clickhouseLoader;
@@ -42,11 +50,14 @@ public class EtlPipelineService {
     }
 
     public synchronized String startInitialBulkLoad() {
+        log.info("api.enter etl.pipeline.bulk-start");
         initializeIfNeeded();
         if (bulkLoadDone) {
+            log.info("api.exit etl.pipeline.bulk-start result=bulk load already completed");
             return "bulk load already completed";
         }
         if (bulkLoadRunning) {
+            log.info("api.exit etl.pipeline.bulk-start result=bulk load already running");
             return "bulk load already running";
         }
 
@@ -62,26 +73,44 @@ public class EtlPipelineService {
         }, "etl-bulk-load");
         worker.setDaemon(true);
         worker.start();
+        log.info("api.exit etl.pipeline.bulk-start result=bulk load started");
         return "bulk load started";
     }
 
-    public synchronized void runNightlyIncremental() {
+    public synchronized void runElasticIncremental() {
+        log.info("api.enter etl.pipeline.es-incremental");
         initializeIfNeeded();
         if (!bulkLoadDone || bulkLoadRunning) {
+            log.info("api.exit etl.pipeline.es-incremental skipped bulkDone={} bulkRunning={}", bulkLoadDone, bulkLoadRunning);
             return;
         }
 
+        accumulator.reset();
         long startedAt = System.currentTimeMillis();
         long now = System.currentTimeMillis();
         for (SourceHandler sourceHandler : sourceHandlers) {
-            pullAndMerge(sourceHandler, stateStore.getLastSyncTs(sourceHandler.sourceName()), now);
+            pullAndMergeIncremental(sourceHandler, stateStore.getEsLastSyncTs(sourceHandler.sourceName()), now);
         }
 
-        flushToTargets("incremental", startedAt);
+        flushElasticsearch("incremental-es", startedAt, accumulator);
         for (SourceHandler sourceHandler : sourceHandlers) {
-            stateStore.setLastSyncTs(sourceHandler.sourceName(), now);
+            stateStore.setEsLastSyncTs(sourceHandler.sourceName(), now);
         }
         stateStore.save();
+        log.info("api.exit etl.pipeline.es-incremental");
+    }
+
+    public synchronized void runClickhouseDailyIncremental() {
+        log.info("api.enter etl.pipeline.ch-incremental");
+        initializeIfNeeded();
+        if (!bulkLoadDone || bulkLoadRunning) {
+            log.info("api.exit etl.pipeline.ch-incremental skipped bulkDone={} bulkRunning={}", bulkLoadDone, bulkLoadRunning);
+            return;
+        }
+
+        LocalDate day = LocalDate.now(ZoneId.of(Constants.ETL_ZONE)).minusDays(1);
+        processClickhouseDay(day, "incremental-ch");
+        log.info("api.exit etl.pipeline.ch-incremental day={}", day);
     }
 
     private synchronized void initializeIfNeeded() {
@@ -91,7 +120,7 @@ public class EtlPipelineService {
         stateStore.load();
         clickhouseLoader.ensureAnalyticsTables();
         elasticsearchLoader.bootstrap();
-        bulkLoadDone = false;
+        bulkLoadDone = stateStore.isBulkDone();
         initialized = true;
     }
 
@@ -100,58 +129,147 @@ public class EtlPipelineService {
             return;
         }
 
-        accumulator.reset();
-        long startedAt = System.currentTimeMillis();
-        long now = System.currentTimeMillis();
-        for (SourceHandler sourceHandler : sourceHandlers) {
-            pullAndMerge(sourceHandler, Constants.INITIAL_PULL_START_TS, now);
+        LocalDate today = LocalDate.now(ZoneId.of(Constants.ETL_ZONE));
+        YearMonth currentMonth = YearMonth.from(today);
+        EtlBatchAccumulator elasticBulkAccumulator = new EtlBatchAccumulator();
+
+        for (int offset = 0; offset < Constants.BULK_MAX_MONTHS; offset++) {
+            YearMonth month = currentMonth.minusMonths(offset);
+            accumulator.reset();
+
+            for (SourceHandler sourceHandler : sourceHandlers) {
+                EtlBatch monthBatch = pullMonthBatch(sourceHandler, month);
+                accumulator.merge(sourceHandler.sourceName(), monthBatch);
+                elasticBulkAccumulator.merge(sourceHandler.sourceName(), monthBatch);
+            }
+
+            int monthRecords = processClickhouseMonth(month, "bulk-ch");
+            if (monthRecords == 0) {
+                break;
+            }
         }
 
-        flushToTargets("bulk", startedAt);
+        long startedAt = System.currentTimeMillis();
+        long now = System.currentTimeMillis();
+        flushElasticsearch("bulk-es", startedAt, elasticBulkAccumulator);
+
         for (SourceHandler sourceHandler : sourceHandlers) {
-            stateStore.setLastSyncTs(sourceHandler.sourceName(), now);
+            stateStore.setEsLastSyncTs(sourceHandler.sourceName(), now);
         }
+        stateStore.setBulkDone(true);
         stateStore.save();
         bulkLoadDone = true;
     }
 
-    private void pullAndMerge(SourceHandler sourceHandler, long fromTs, long toTs) {
+    private int processClickhouseDay(LocalDate day, String batchType) {
+        accumulator.reset();
+        long startedAt = System.currentTimeMillis();
+        for (SourceHandler sourceHandler : sourceHandlers) {
+            pullAndMergeByDate(sourceHandler, day);
+        }
+
+        List<BloodBank> banks = accumulator.collectLatestBanks();
+        List<Donor> donors = accumulator.collectLatestDonors(banks);
+        List<InventoryTransaction> transactions = accumulator.collectPendingInventoryTransactions();
+        int totalRead = banks.size() + donors.size() + transactions.size();
+        if (totalRead == 0) {
+            return 0;
+        }
+
+        clickhouseLoader.loadBanks(banks);
+        clickhouseLoader.loadDonors(donors);
+        clickhouseLoader.loadInventoryDay(day, transactions);
+        clickhouseLoader.aggregateDonorDay(day);
+
+        long endedAt = System.currentTimeMillis();
+        recordAuditRows(batchType, "clickhouse", startedAt, endedAt, banks, donors, transactions, transactions.size());
+        accumulator.clearPendingInventoryTransactions();
+        return totalRead;
+    }
+
+    private int processClickhouseMonth(YearMonth month, String batchType) {
+        long startedAt = System.currentTimeMillis();
+
+        List<BloodBank> banks = accumulator.collectLatestBanks();
+        List<Donor> donors = accumulator.collectLatestDonors(banks);
+        List<InventoryTransaction> transactions = accumulator.collectPendingInventoryTransactions();
+        int totalRead = banks.size() + donors.size() + transactions.size();
+        if (totalRead == 0) {
+            return 0;
+        }
+
+        clickhouseLoader.loadBanks(banks);
+        clickhouseLoader.loadDonors(donors);
+
+        Set<LocalDate> affectedDays = new TreeSet<>();
+        for (InventoryTransaction transaction : transactions) {
+            LocalDate day = TimeUtil.toDateTime(transaction.getEventTimestamp()).toLocalDate();
+            if (YearMonth.from(day).equals(month)) {
+                affectedDays.add(day);
+            }
+        }
+        for (Donor donor : donors) {
+            LocalDate day = TimeUtil.toDateTime(donor.getUpdatedAt()).toLocalDate();
+            if (YearMonth.from(day).equals(month)) {
+                affectedDays.add(day);
+            }
+        }
+
+        for (LocalDate day : affectedDays) {
+            clickhouseLoader.loadInventoryDay(day, transactions);
+            clickhouseLoader.aggregateDonorDay(day);
+        }
+
+        long endedAt = System.currentTimeMillis();
+        recordAuditRows(batchType, "clickhouse", startedAt, endedAt, banks, donors, transactions, transactions.size());
+        accumulator.clearPendingInventoryTransactions();
+        return totalRead;
+    }
+
+    private void flushElasticsearch(String batchType, long startedAt, EtlBatchAccumulator batchAccumulator) {
+        List<BloodBank> banks = batchAccumulator.collectLatestBanks();
+        List<Donor> donors = batchAccumulator.collectLatestDonors(banks);
+        List<InventoryTransaction> currentInventoryState = batchAccumulator.collectCurrentInventoryState();
+        List<InventoryTransaction> pendingTransactions = batchAccumulator.collectPendingInventoryTransactions();
+
+        elasticsearchLoader.loadBanks(banks, currentInventoryState);
+        elasticsearchLoader.loadDonors(donors);
+
+        long endedAt = System.currentTimeMillis();
+        recordAuditRows(batchType, "elasticsearch", startedAt, endedAt, banks, donors, pendingTransactions, currentInventoryState.size());
+        batchAccumulator.clearPendingInventoryTransactions();
+    }
+
+    private void pullAndMergeIncremental(SourceHandler sourceHandler, long fromTs, long toTs) {
         Object payload = sourceHandler.fetchIncremental(fromTs, toTs);
         EtlBatch batch = sourceHandler.transform(payload, pincodeGeoMap);
         accumulator.merge(sourceHandler.sourceName(), batch);
     }
 
-    private void flushToTargets(String batchType, long startedAt) {
-        List<BloodBank> banks = accumulator.collectLatestBanks();
-        List<Donor> donors = accumulator.collectLatestDonors(banks);
-        List<InventoryTransaction> pendingTransactions = accumulator.collectPendingInventoryTransactions();
-        List<InventoryTransaction> currentInventoryState = accumulator.collectCurrentInventoryState();
+    private void pullAndMergeByDate(SourceHandler sourceHandler, LocalDate day) {
+        Object payload = sourceHandler.fetchByDate(day);
+        EtlBatch batch = sourceHandler.transform(payload, pincodeGeoMap);
+        accumulator.merge(sourceHandler.sourceName(), batch);
+    }
 
-        clickhouseLoader.loadBanks(banks);
-        clickhouseLoader.loadDonors(donors);
-        clickhouseLoader.loadInventoryTransactions(pendingTransactions);
-        clickhouseLoader.batchAggregateInventoryDays();
-        clickhouseLoader.batchAggregateDonorDays();
-        elasticsearchLoader.loadBanks(banks, currentInventoryState);
-        elasticsearchLoader.loadDonors(donors);
-
-        long endedAt = System.currentTimeMillis();
-        recordAuditRows(batchType, startedAt, endedAt, banks, donors, pendingTransactions, currentInventoryState);
-        accumulator.clearPendingInventoryTransactions();
+    private EtlBatch pullMonthBatch(SourceHandler sourceHandler, YearMonth month) {
+        Object payload = sourceHandler.fetchByMonth(month);
+        return sourceHandler.transform(payload, pincodeGeoMap);
     }
 
     private void recordAuditRows(
             String batchType,
+            String target,
             long startedAt,
             long endedAt,
             List<BloodBank> banks,
             List<Donor> donors,
-            List<InventoryTransaction> pendingTransactions,
-            List<InventoryTransaction> currentInventoryState) {
+            List<InventoryTransaction> transactions,
+            long inventoryStateRows) {
         Map<String, long[]> countsBySource = new HashMap<>();
         accumulateBankCounts(countsBySource, banks);
         accumulateDonorCounts(countsBySource, donors);
-        accumulateTransactionCounts(countsBySource, pendingTransactions);
+        accumulateTransactionCounts(countsBySource, transactions);
 
         long totalRead = 0L;
         long totalWritten = 0L;
@@ -162,30 +280,29 @@ public class EtlPipelineService {
             totalRead += rowsRead;
             totalWritten += rowsWritten;
             clickhouseLoader.recordLoadAudit(
-                batchType + "-" + startedAt + "-" + entry.getKey(),
+                batchType + "-" + startedAt + "-" + target + "-" + entry.getKey(),
                 entry.getKey(),
-                "clickhouse/elasticsearch",
+                target,
                 "etl_batch",
                 startedAt,
                 endedAt,
                 rowsRead,
                 rowsWritten,
                 "success",
-                "banks+donors+inventory loaded");
+                "loaded");
         }
 
-        long inventoryProjectionRows = currentInventoryState == null ? 0L : currentInventoryState.size();
         clickhouseLoader.recordLoadAudit(
-            batchType + "-" + startedAt + "-all",
+            batchType + "-" + startedAt + "-" + target + "-all",
             "all",
-            "clickhouse/elasticsearch",
+            target,
             "etl_batch",
             startedAt,
             endedAt,
             totalRead,
             totalWritten,
             "success",
-            "batch completed; inventory_state_rows=" + inventoryProjectionRows);
+            "inventory_state_rows=" + inventoryStateRows);
     }
 
     private void accumulateBankCounts(Map<String, long[]> countsBySource, List<BloodBank> banks) {

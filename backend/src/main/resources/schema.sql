@@ -50,8 +50,6 @@ CREATE TABLE responses (
     phone_number VARCHAR(15),
     
     blood_group VARCHAR(20),
-    response_status VARCHAR(10)
-    
     location TEXT,
     
     response_status VARCHAR(10) CHECK (response_status IN ('YES', 'NO')),

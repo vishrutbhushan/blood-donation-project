@@ -277,6 +277,8 @@ services:
     container_name: hemo-grafana
     env_file:
       - ./.env
+    environment:
+      GF_INSTALL_PLUGINS: grafana-clickhouse-datasource
     ports:
       - "3000:3000"
     volumes:

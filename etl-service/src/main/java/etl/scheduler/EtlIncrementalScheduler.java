@@ -12,8 +12,13 @@ public class EtlIncrementalScheduler {
         this.pipelineService = pipelineService;
     }
 
-    @Scheduled(cron = "${ETL_INCREMENTAL_CRON:0 0 0 * * *}", zone = "${ETL_INCREMENTAL_ZONE:Asia/Kolkata}")
-    public void runNightlyIncremental() {
-        pipelineService.runNightlyIncremental();
+    @Scheduled(cron = "${ETL_ES_CRON:0 */5 * * * *}", zone = "${ETL_ZONE:Asia/Kolkata}")
+    public void runElasticIncremental() {
+        pipelineService.runElasticIncremental();
+    }
+
+    @Scheduled(cron = "${ETL_CH_CRON:0 0 0 * * *}", zone = "${ETL_ZONE:Asia/Kolkata}")
+    public void runClickhouseIncremental() {
+        pipelineService.runClickhouseDailyIncremental();
     }
 }
