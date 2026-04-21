@@ -16,6 +16,7 @@ import org.springframework.web.client.RestClient;
 
 @Service
 public class BloodBankService {
+        private static final double SEARCH_RADIUS_KM = 5000.0;
         private static final String NEAREST_BANKS_QUERY_TEMPLATE = """
                         {
                             "size": 20,
@@ -24,6 +25,7 @@ public class BloodBankService {
                                 "bool": {
                                     "filter": [
                                                                                 { "exists": { "field": "location" } }
+                                                                                ,{ "geo_distance": { "distance": "%.1fkm", "location": { "lat": %.8f, "lon": %.8f } } }
                                                                                 %s
                                     ],
                                     "must_not": [
@@ -57,7 +59,7 @@ public class BloodBankService {
     public List<BloodBankDTO> findNearestBloodBanks(Double userLatitude, Double userLongitude, String bloodGroup, String component) {
         try {
             String optionalFilters = buildOptionalFilters(bloodGroup, component);
-            String queryBody = String.format(Locale.US, NEAREST_BANKS_QUERY_TEMPLATE, optionalFilters, userLatitude, userLongitude);
+            String queryBody = String.format(Locale.US, NEAREST_BANKS_QUERY_TEMPLATE, SEARCH_RADIUS_KM, userLatitude, userLongitude, optionalFilters);
             EsSearchResponse response = elasticsearchClient.post()
                 .uri("/bb_inventory_current/_search")
                 .contentType(Objects.requireNonNull(MediaType.APPLICATION_JSON))

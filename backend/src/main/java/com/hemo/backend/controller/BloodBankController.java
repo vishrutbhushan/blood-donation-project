@@ -43,12 +43,7 @@ public class BloodBankController {
         PincodeGeoService.GeoPoint geoPoint = pincodeGeoService.resolve(pincode)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported pincode"));
 
-        List<BloodBankDTO> nearest = bloodBankService.findNearestBloodBanks(geoPoint.lat(), geoPoint.lon(), bloodGroup, component);
-        List<BloodBankDTO> exactPincode = nearest.stream()
-                .filter(bank -> pincode.equals(bank.getPincode()))
-                .toList();
-
-        List<BloodBankDTO> response = exactPincode.isEmpty() ? nearest : exactPincode;
+        List<BloodBankDTO> response = bloodBankService.findNearestBloodBanks(geoPoint.lat(), geoPoint.lon(), bloodGroup, component);
         log.info("api.exit blood-banks.search count={}", response.size());
         return response;
     }

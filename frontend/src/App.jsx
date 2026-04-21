@@ -243,16 +243,19 @@ export default function App() {
     const rows = await apiRequest(`/api/backend/blood-banks/search?${query}`);
     const list = Array.isArray(rows) ? rows : [];
 
-    return list.map((row) => ({
-      name: row.bankName || '-',
-      category: row.category || '-',
-      pincode: row.pincode || '-',
-      contact: row.phone || '-',
-      address: row.address || '-',
-      source: row.sourceId || '-',
-      bloodGroup: group || '-',
-      component: component || '-',
-    }));
+    return list
+      .map((row) => ({
+        name: row.bankName || '-',
+        category: row.category || '-',
+        pincode: row.pincode || '-',
+        contact: row.phone || '-',
+        address: row.address || '-',
+        source: row.sourceId || '-',
+        distanceKm: Number(row.distanceKm || 0),
+        bloodGroup: group || '-',
+        component: component || '-',
+      }))
+      .sort((left, right) => left.distanceKm - right.distanceKm);
   }
 
   async function fetchDonors(group, pincode) {
@@ -490,9 +493,11 @@ export default function App() {
                   <Table size="small">
                     <TableHead>
                       <TableRow>
+                        <TableCell>#</TableCell>
                         <TableCell>Name</TableCell>
                         <TableCell>Category</TableCell>
                         <TableCell>Pincode</TableCell>
+                        <TableCell>Distance (km)</TableCell>
                         <TableCell>Address</TableCell>
                         <TableCell>Contact</TableCell>
                         <TableCell>Source</TableCell>
@@ -501,9 +506,11 @@ export default function App() {
                     <TableBody>
                       {banks.map((bank, idx) => (
                         <TableRow key={`${bank.name}-${idx}`}>
+                          <TableCell>{idx + 1}</TableCell>
                           <TableCell>{bank.name}</TableCell>
                           <TableCell>{bank.category}</TableCell>
                           <TableCell>{bank.pincode}</TableCell>
+                          <TableCell>{Number.isFinite(bank.distanceKm) ? bank.distanceKm.toFixed(2) : '0.00'}</TableCell>
                           <TableCell>{bank.address}</TableCell>
                           <TableCell>{bank.contact}</TableCell>
                           <TableCell>{bank.source}</TableCell>
