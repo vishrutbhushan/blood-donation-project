@@ -6,8 +6,9 @@ import com.hemo.backend.dto.BloodBankDTO;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Objects;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -19,6 +20,32 @@ import org.springframework.web.client.RestClient;
 public class BloodBankService {
     private static final int MAX_RESULTS = 20;
     private static final int FETCH_SIZE = 200;
+        private static final String SEARCH_QUERY_TEMPLATE = """
+                        {
+                            "size": %d,
+                            "track_total_hits": false,
+                            "query": {
+                                "bool": {
+                                    "filter": [
+                                        %s
+                                    ],
+                                    "must_not": [
+                                        { "geo_distance": { "distance": "1m", "location": { "lat": 0, "lon": 0 } } }
+                                    ]
+                                }
+                            },
+                            "sort": [
+                                {
+                                    "_geo_distance": {
+                                        "location": { "lat": %.8f, "lon": %.8f },
+                                        "order": "asc",
+                                        "unit": "km",
+                                        "distance_type": "arc"
+                                    }
+                                }
+                            ]
+                        }
+                        """;
 
     private final RestClient elasticsearchClient;
     private final BloodCompatibilityService bloodCompatibilityService;
@@ -36,7 +63,7 @@ public class BloodBankService {
 
     public List<BloodBankDTO> findNearestBloodBanks(Double userLatitude, Double userLongitude, String bloodGroup, String component) {
         try {
-            Map<String, Object> queryBody = buildQueryBody(userLatitude, userLongitude, bloodGroup, component);
+            String queryBody = buildQueryBody(userLatitude, userLongitude, bloodGroup, component);
             EsSearchResponse response = elasticsearchClient.post()
                 .uri("/bb_inventory_current/_search")
                 .contentType(Objects.requireNonNull(MediaType.APPLICATION_JSON))
@@ -50,54 +77,39 @@ public class BloodBankService {
         }
     }
 
-    private Map<String, Object> buildQueryBody(Double userLatitude, Double userLongitude, String bloodGroup, String component) {
-        List<Object> filters = new ArrayList<>();
-        filters.add(Map.of("exists", Map.of("field", "location")));
+    private String buildQueryBody(Double userLatitude, Double userLongitude, String bloodGroup, String component) {
+        List<String> filters = new ArrayList<>();
+        filters.add("{ \"exists\": { \"field\": \"location\" } }");
 
         if (bloodGroup != null && !bloodGroup.isBlank()) {
             List<String> compatibleGroups = bloodCompatibilityService.compatibleDonorGroups(bloodGroup);
             if (!compatibleGroups.isEmpty()) {
-                filters.add(Map.of("terms", Map.of("blood_group", compatibleGroups)));
+                filters.add("{ \"terms\": { \"blood_group\": [" + joinQuotedJsonValues(compatibleGroups) + "] } }");
             }
         }
 
         if (component != null && !component.isBlank()) {
-            String normalizedComponent = component.trim();
-            filters.add(Map.of(
-                "bool",
-                Map.of(
-                    "should",
-                    List.of(
-                        Map.of("term", Map.of("component", normalizedComponent)),
-                        Map.of("term", Map.of("component_type", normalizedComponent)),
-                        Map.of("term", Map.of("blood_component", normalizedComponent))
-                    ),
-                    "minimum_should_match",
-                    1
-                )
-            ));
+            String normalizedComponent = escapeJson(component.trim());
+            filters.add("{ \"bool\": { \"should\": ["
+                + "{ \"term\": { \"component\": \"" + normalizedComponent + "\" } },"
+                + "{ \"term\": { \"component_type\": \"" + normalizedComponent + "\" } },"
+                + "{ \"term\": { \"blood_component\": \"" + normalizedComponent + "\" } }"
+                + "], \"minimum_should_match\": 1 } }");
         }
 
-        Map<String, Object> query = new LinkedHashMap<>();
-        query.put("size", FETCH_SIZE);
-        query.put("track_total_hits", false);
-        query.put("query", Map.of(
-            "bool",
-            Map.of(
-                "filter", filters,
-                "must_not", List.of(Map.of("geo_distance", Map.of("distance", "1m", "location", Map.of("lat", 0, "lon", 0))))
-            )
-        ));
-        query.put("sort", List.of(Map.of(
-            "_geo_distance",
-            Map.of(
-                "location", Map.of("lat", userLatitude, "lon", userLongitude),
-                "order", "asc",
-                "unit", "km",
-                "distance_type", "arc"
-            )
-        )));
-        return query;
+        return String.format(Locale.US, SEARCH_QUERY_TEMPLATE, FETCH_SIZE, String.join(",\n                    ", filters), userLatitude, userLongitude);
+    }
+
+    private String joinQuotedJsonValues(List<String> values) {
+        List<String> quoted = new ArrayList<>();
+        for (String value : values) {
+            quoted.add("\"" + escapeJson(value) + "\"");
+        }
+        return String.join(", ", quoted);
+    }
+
+    private String escapeJson(String value) {
+        return value == null ? "" : value.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 
     private List<BloodBankDTO> toDtos(EsSearchResponse response) {
