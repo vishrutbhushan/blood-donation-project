@@ -23,12 +23,15 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
 @Component
 public class ClickhouseLoader {
+    private static final Logger log = LoggerFactory.getLogger(ClickhouseLoader.class);
     private final RestClient clickhouse;
     private final Set<String> seededSources = new HashSet<>();
     private final Set<String> seededBloodGroups = new HashSet<>();
@@ -42,6 +45,7 @@ public class ClickhouseLoader {
     }
 
     public void ensureAnalyticsTables() {
+        log.info("api.enter ClickhouseLoader.ensureAnalyticsTables");
         sql("CREATE DATABASE IF NOT EXISTS blood_ops");
 
         sql("CREATE TABLE IF NOT EXISTS blood_ops.fact_inventory_day ("
@@ -108,10 +112,14 @@ public class ClickhouseLoader {
         sql("ALTER TABLE blood_ops.meta_load_audit MODIFY COLUMN created_at DateTime('Asia/Kolkata')");
 
         seedMetadataCatalog();
+
+        log.info("api.exit ClickhouseLoader.ensureAnalyticsTables");
     }
 
     public void loadBanks(List<BloodBank> banks) {
+        log.info("api.enter ClickhouseLoader.loadBanks");
         if (banks == null || banks.isEmpty()) {
+            log.info("api.exit ClickhouseLoader.loadBanks");
             return;
         }
         for (BloodBank b : banks) {
@@ -154,10 +162,14 @@ public class ClickhouseLoader {
 
             ingestCounter(b.getUpdatedAt(), b.getSource(), "incremental", "bank", 1);
         }
+
+        log.info("api.exit ClickhouseLoader.loadBanks");
     }
 
     public void loadDonors(List<Donor> donors) {
+        log.info("api.enter ClickhouseLoader.loadDonors");
         if (donors == null || donors.isEmpty()) {
+            log.info("api.exit ClickhouseLoader.loadDonors");
             return;
         }
         for (Donor d : donors) {
@@ -230,13 +242,17 @@ public class ClickhouseLoader {
 
             ingestCounter(d.getUpdatedAt(), d.getSource(), "incremental", "donor", 1);
         }
+
+        log.info("api.exit ClickhouseLoader.loadDonors");
     }
 
     public void loadInventoryDay(LocalDate businessDate, List<InventoryTransaction> transactions) {
+        log.info("api.enter ClickhouseLoader.loadInventoryDay");
         String day = businessDate.toString();
         sql("ALTER TABLE blood_ops.fact_inventory_day DELETE WHERE event_date = toDate('" + esc(day) + "')");
 
         if (transactions == null || transactions.isEmpty()) {
+            log.info("api.exit ClickhouseLoader.loadInventoryDay");
             return;
         }
 
@@ -316,9 +332,12 @@ public class ClickhouseLoader {
                 + withdrawalEvents + ","
                 + version + ")");
         }
+
+            log.info("api.exit ClickhouseLoader.loadInventoryDay");
     }
 
     public void aggregateDonorDay(LocalDate businessDate) {
+            log.info("api.enter ClickhouseLoader.aggregateDonorDay");
         String day = businessDate.toString();
         long version = System.currentTimeMillis();
 
@@ -339,6 +358,8 @@ public class ClickhouseLoader {
             + "WHERE toDate(snapshot_updated_at) = toDate('" + esc(day) + "') "
             + "AND is_deleted = 0 "
             + "GROUP BY source_id, source_system, bank_id, blood_group_id");
+
+            log.info("api.exit ClickhouseLoader.aggregateDonorDay");
     }
 
     public void recordLoadAudit(
@@ -352,6 +373,7 @@ public class ClickhouseLoader {
             long rowsWritten,
             String status,
             String message) {
+        log.info("api.enter ClickhouseLoader.recordLoadAudit");
         sql("INSERT INTO blood_ops.meta_load_audit "
             + "(batch_id, source_system, target_dataset, started_at, ended_at, rows_read, rows_written, status, message) VALUES ("
             + q(batchId) + ","
@@ -363,6 +385,8 @@ public class ClickhouseLoader {
             + rowsWritten + ","
             + q(status) + ","
             + q(message) + ")");
+
+        log.info("api.exit ClickhouseLoader.recordLoadAudit");
     }
 
     private void seedMetadataCatalog() {

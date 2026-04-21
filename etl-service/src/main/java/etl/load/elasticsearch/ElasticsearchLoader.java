@@ -13,6 +13,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -20,6 +22,7 @@ import org.springframework.web.client.RestClientResponseException;
 
 @Component
 public class ElasticsearchLoader {
+    private static final Logger log = LoggerFactory.getLogger(ElasticsearchLoader.class);
     private static final DateTimeFormatter STORE = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
         private static final String BANK_TEMPLATE = """
                 {
@@ -93,7 +96,9 @@ public class ElasticsearchLoader {
     }
 
     public void loadBanks(List<BloodBank> banks, List<InventoryTransaction> currentInventoryState) {
+        log.info("api.enter ElasticsearchLoader.loadBanks");
         if (banks == null || banks.isEmpty()) {
+            log.info("api.exit ElasticsearchLoader.loadBanks");
             return;
         }
 
@@ -137,6 +142,8 @@ public class ElasticsearchLoader {
                     .toBodilessEntity();
             }
         }
+
+        log.info("api.exit ElasticsearchLoader.loadBanks");
     }
 
     private Map<String, Object> toBankInventoryDoc(BloodBank bank, String bloodGroup, String component, int unitsAvailable, String updatedAt) {
@@ -168,14 +175,18 @@ public class ElasticsearchLoader {
     }
 
     public void bootstrap() {
+        log.info("api.enter ElasticsearchLoader.bootstrap");
         putTemplate("bb_inventory_current_template", BANK_TEMPLATE);
         putTemplate("donor_availability_current_template", DONOR_TEMPLATE);
         deleteIndex(Constants.ELASTIC_INDEX_BANKS);
         deleteIndex(Constants.ELASTIC_INDEX_DONORS);
+        log.info("api.exit ElasticsearchLoader.bootstrap");
     }
 
     public void loadDonors(List<Donor> donors) {
+        log.info("api.enter ElasticsearchLoader.loadDonors");
         if (donors == null || donors.isEmpty()) {
+            log.info("api.exit ElasticsearchLoader.loadDonors");
             return;
         }
         for (Donor d : donors) {
@@ -208,6 +219,8 @@ public class ElasticsearchLoader {
                     .toBodilessEntity();
             }
         }
+
+        log.info("api.exit ElasticsearchLoader.loadDonors");
     }
 
     private String sourceAwareId(String source, String id) {

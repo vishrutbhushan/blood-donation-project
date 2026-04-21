@@ -8,12 +8,13 @@ Usage:
     python3 seed.py
 
 Scale control:
-    BANKS_PER_RUN  = 20         ->  20 new blood banks per run
-    DONORS_PER_RUN = 100        ->  100 new donors per run
+    BANKS_PER_RUN  = 50         ->  50 new blood banks per source per run
+    DONORS_PER_RUN = 2500       ->  2500 new donors per source per run
+    INVENTORY_TXN_PER_RUN = 5000 -> 5000 new inventory transactions per source per run
 
 Runs APPEND — data is never wiped. Each donor gets a guaranteed-unique
 UUID-based identifier so re-runs never produce duplicates.
-Run once → ~1 M records. Run 10× → ~10 M records.
+Run once → 50 banks + 2500 donors + 5000 inventory transactions per source.
 """
 
 import csv
@@ -30,9 +31,9 @@ from psycopg2.extras import execute_values
 # ---------------------------------------------------------------------------
 # Tune per run — adjust without restarting Docker
 # ---------------------------------------------------------------------------
-BANKS_PER_RUN  = 500              # new blood banks to insert each invocation
-DONORS_PER_RUN = 1_000_000        # new donors to insert each invocation
-INVENTORY_TXN_PER_RUN = 1_000_000 # inventory transactions per DB per run
+BANKS_PER_RUN  = 50               # new blood banks to insert for each source per invocation
+DONORS_PER_RUN = 2_500            # new donors to insert for each source per invocation
+INVENTORY_TXN_PER_RUN = 5_000     # inventory transactions to insert for each source per run
 BATCH_SIZE     = 10_000           # rows per executemany batch (keeps memory bounded)
 CSV_PREVIEW_ROWS = 100        # overwrite a 100-row preview CSV on each run
 CSV_PREVIEW_PATH = Path(__file__).resolve().with_name("generated_seed_preview.csv")
