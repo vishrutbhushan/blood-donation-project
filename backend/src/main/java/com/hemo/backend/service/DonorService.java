@@ -46,8 +46,8 @@ public class DonorService {
             response.setRespondedAt(LocalDateTime.now());
             responseRepository.save(response);
 
-            // Update request status to FULFILLED
-            request.setStatus("FULFILLED");
+            // Close the request after a donor accepts it
+            request.setStatus("CLOSED");
             requestRepository.save(request);
 
             // Send donor contact to requestor via WhatsApp
@@ -75,8 +75,8 @@ public class DonorService {
 
         } else if (reply.equals("NO")) {
 
-            // Mark response as declined
-            response.setResponseStatus("DECLINED");
+            // Keep response status schema-valid for a donor decline
+            response.setResponseStatus("NO");
             response.setRespondedAt(LocalDateTime.now());
             responseRepository.save(response);
 
