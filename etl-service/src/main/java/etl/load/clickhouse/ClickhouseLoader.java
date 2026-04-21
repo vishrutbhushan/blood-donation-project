@@ -451,10 +451,8 @@ public class ClickhouseLoader {
             + ") AS component_id,"
             + " component AS component_name,"
             + " now() AS updated_at "
-            + "FROM (SELECT DISTINCT component FROM blood_ops.fact_inventory_day WHERE component != '') f "
-            + "WHERE NOT EXISTS ("
-            + " SELECT 1 FROM blood_ops.dim_component d WHERE upperUTF8(d.component_name) = upperUTF8(f.component)"
-            + ")");
+            + "FROM (SELECT DISTINCT component FROM blood_ops.fact_inventory_day WHERE component != '') "
+            + "WHERE upperUTF8(component) NOT IN (SELECT upperUTF8(component_name) FROM blood_ops.dim_component)");
     }
 
     private void seedDateAndTimeDimensions() {
