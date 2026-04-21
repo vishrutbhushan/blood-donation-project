@@ -35,6 +35,7 @@ public class ClickhouseLoader {
     private final RestClient clickhouse;
     private final Set<String> seededSources = new HashSet<>();
     private final Set<String> seededBloodGroups = new HashSet<>();
+    private final Set<String> seededComponents = new HashSet<>();
 
     public ClickhouseLoader(RestClient.Builder builder) {
         this.clickhouse = builder
@@ -112,8 +113,8 @@ public class ClickhouseLoader {
         sql("ALTER TABLE blood_ops.meta_load_audit MODIFY COLUMN created_at DateTime('Asia/Kolkata')");
 
         seedMetadataCatalog();
-
-        log.info("api.exit ClickhouseLoader.ensureAnalyticsTables");
+        seedDateAndTimeDimensions();
+        backfillComponentDimensionFromFacts();
     }
 
     public void loadBanks(List<BloodBank> banks) {
@@ -312,6 +313,7 @@ public class ClickhouseLoader {
                 continue;
             }
             seedSource(sourceId, first.getSource());
+            seedComponent(first.getComponent());
             long bankId = bankId(first.getSource(), first.getBankId());
 
             sql("INSERT INTO blood_ops.fact_inventory_day "
@@ -461,6 +463,68 @@ public class ClickhouseLoader {
             + "now())");
     }
 
+    private void seedComponent(String component) {
+        String normalized = normalizeComponent(component);
+        if (normalized.isBlank()) {
+            return;
+        }
+        if (!seededComponents.add(normalized)) {
+            return;
+        }
+        sql("INSERT INTO blood_ops.dim_component (component_id, component_name, updated_at) VALUES ("
+            + componentId(normalized) + ","
+            + q(normalized) + ","
+            + "now())");
+    }
+
+    private void backfillComponentDimensionFromFacts() {
+        sql("INSERT INTO blood_ops.dim_component (component_id, component_name, updated_at) "
+            + "SELECT "
+            + "multiIf("
+            + " upperUTF8(component) = 'WHOLE BLOOD', toUInt8(1),"
+            + " upperUTF8(component) = 'PACKED RBC', toUInt8(2),"
+            + " upperUTF8(component) = 'PLATELETS', toUInt8(3),"
+            + " upperUTF8(component) = 'PLASMA', toUInt8(4),"
+            + " upperUTF8(component) = 'FRESH FROZEN PLASMA', toUInt8(5),"
+            + " upperUTF8(component) = 'CRYOPRECIPITATE', toUInt8(6),"
+            + " toUInt8(250)"
+            + ") AS component_id,"
+            + " component AS component_name,"
+            + " now() AS updated_at "
+            + "FROM (SELECT DISTINCT component FROM blood_ops.fact_inventory_day WHERE component != '') f "
+            + "WHERE NOT EXISTS ("
+            + " SELECT 1 FROM blood_ops.dim_component d WHERE upperUTF8(d.component_name) = upperUTF8(f.component)"
+            + ")");
+    }
+
+    private void seedDateAndTimeDimensions() {
+        if (scalarLong("SELECT count() FROM blood_ops.dim_date") == 0) {
+            sql("INSERT INTO blood_ops.dim_date (date_id, dt, year, quarter, month, day, iso_week) "
+                + "SELECT "
+                + "toUInt32(formatDateTime(d, '%Y%m%d')) AS date_id,"
+                + "d AS dt,"
+                + "toUInt16(toYear(d)) AS year,"
+                + "toUInt8(toQuarter(d)) AS quarter,"
+                + "toUInt8(toMonth(d)) AS month,"
+                + "toUInt8(toDayOfMonth(d)) AS day,"
+                + "toUInt8(toWeek(d, 1)) AS iso_week "
+                + "FROM ("
+                + " SELECT addDays(toDate('2015-01-01'), number) AS d FROM numbers(7670)"
+                + ")");
+        }
+
+        if (scalarLong("SELECT count() FROM blood_ops.dim_time") == 0) {
+            sql("INSERT INTO blood_ops.dim_time (time_id, event_time, event_date_id, hour, minute) "
+                + "SELECT "
+                + "toUInt32(intDiv(number, 60) * 100 + (number % 60)) AS time_id,"
+                + "toDateTime('1970-01-01 00:00:00') + toIntervalMinute(number) AS event_time,"
+                + "toUInt32(19700101) AS event_date_id,"
+                + "toUInt8(intDiv(number, 60)) AS hour,"
+                + "toUInt8(number % 60) AS minute "
+                + "FROM numbers(1440)");
+        }
+    }
+
     private void ingestCounter(String updatedAt, String source, String apiName, String recordType, int count) {
         LocalDateTime at = TimeUtil.toDateTime(updatedAt).truncatedTo(ChronoUnit.HOURS);
         sql("INSERT INTO blood_ops.source_ingestion_hourly_agg "
@@ -504,6 +568,25 @@ public class ClickhouseLoader {
             return "UNKNOWN";
         }
         return bloodGroup.trim().toUpperCase(Locale.ROOT);
+    }
+
+    private String normalizeComponent(String component) {
+        if (component == null || component.isBlank()) {
+            return "";
+        }
+        return component.trim().toUpperCase(Locale.ROOT);
+    }
+
+    private int componentId(String component) {
+        return switch (normalizeComponent(component)) {
+            case "WHOLE BLOOD" -> 1;
+            case "PACKED RBC" -> 2;
+            case "PLATELETS" -> 3;
+            case "PLASMA" -> 4;
+            case "FRESH FROZEN PLASMA" -> 5;
+            case "CRYOPRECIPITATE" -> 6;
+            default -> 250;
+        };
     }
 
     private boolean isDelete(String op) {
