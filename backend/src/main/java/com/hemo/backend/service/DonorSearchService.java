@@ -211,7 +211,7 @@ public class DonorSearchService {
         long baseBelow10 = response.getBelow10KmCount() == null ? 0L : response.getBelow10KmCount();
         long baseBelow50 = response.getBelow50KmCount() == null ? 0L : response.getBelow50KmCount();
         long baseAbove50 = response.getAbove50KmCount() == null ? 0L : response.getAbove50KmCount();
-        long syntheticCount = baseTotal > 0 ? SYNTHETIC_DEMO_DONOR_COUNT : 0L;
+        long syntheticCount = SYNTHETIC_DEMO_DONOR_COUNT;
 
         return DonorSearchSummaryDTO.builder()
             .recipientBloodGroup(response.getRecipientBloodGroup())

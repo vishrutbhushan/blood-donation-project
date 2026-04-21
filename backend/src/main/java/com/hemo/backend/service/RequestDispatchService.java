@@ -7,6 +7,7 @@ import com.hemo.backend.entity.Response;
 import com.hemo.backend.repository.ResponseRepository;
 import com.twilio.rest.api.v2010.account.Message;
 import com.twilio.type.PhoneNumber;
+import java.util.ArrayList;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
@@ -38,23 +39,26 @@ public class RequestDispatchService {
                 excludedDonorIds
         );
 
-        int realDonorCount = donorBatch.getDonors() == null ? 0 : donorBatch.getDonors().size();
+        List<DonorCandidateDTO> dispatchDonors = donorBatch.getDonors() == null
+            ? new ArrayList<>()
+            : new ArrayList<>(donorBatch.getDonors());
+
         boolean demoAlreadyContacted = excludedDonorIds.contains(DEMO_DONOR_ID);
-        if (realDonorCount > 0 && !demoAlreadyContacted && donorBatch.getDonors() != null) {
-            donorBatch.getDonors().add(0, DonorCandidateDTO.builder()
-            .donorId(DEMO_DONOR_ID)
-            .name("Demo Donor")
-            .bloodGroup(request.getBloodGroup())
-            .phone(DEMO_DONOR_PHONE)
-            .pincode(request.getSearch().getHospitalPincode())
-            .location("Demo")
-            .source("DEMO")
-            .distanceKm(0.0)
-            .build());
+        if (!demoAlreadyContacted) {
+            dispatchDonors.add(0, DonorCandidateDTO.builder()
+                .donorId(DEMO_DONOR_ID)
+                .name("Demo Donor")
+                .bloodGroup(request.getBloodGroup())
+                .phone(DEMO_DONOR_PHONE)
+                .pincode(request.getSearch().getHospitalPincode())
+                .location("Demo")
+                .source("DEMO")
+                .distanceKm(0.0)
+                .build());
         }
 
         int sent = 0;
-        for (DonorCandidateDTO donor : donorBatch.getDonors()) {
+        for (DonorCandidateDTO donor : dispatchDonors) {
             if (sent >= batchSize) {
                 break;
             }
