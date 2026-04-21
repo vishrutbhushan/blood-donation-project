@@ -35,8 +35,9 @@ BANKS_PER_RUN  = 50               # new blood banks to insert for each source pe
 DONORS_PER_RUN = 2_500            # new donors to insert for each source per invocation
 INVENTORY_TXN_PER_RUN = 5_000     # inventory transactions to insert for each source per run
 BATCH_SIZE     = 10_000           # rows per executemany batch (keeps memory bounded)
-CSV_PREVIEW_ROWS = 100        # overwrite a 100-row preview CSV on each run
-CSV_PREVIEW_PATH = Path(__file__).resolve().with_name("generated_seed_preview.csv")
+CSV_BANKS_PATH = Path(__file__).resolve().with_name("generated_seed_blood_banks.csv")
+CSV_DONORS_PATH = Path(__file__).resolve().with_name("generated_seed_donors.csv")
+CSV_INVENTORY_PATH = Path(__file__).resolve().with_name("generated_seed_inventory_transactions.csv")
 RANDOM_SEED = 42
 
 random.seed(RANDOM_SEED)
@@ -659,34 +660,28 @@ def preview_record(
     )
 
 
-def write_preview_csv(preview_rows):
-    rows = []
-
-    def take(entity_type, limit):
-        taken = 0
-        for row in preview_rows:
-            if row.get("entity_type") == entity_type:
-                rows.append(row)
-                taken += 1
-                if taken >= limit:
-                    break
-
-    take("blood_bank", 20)
-    take("inventory_transaction", 40)
-    take("donor", 40)
-
-    if len(rows) < CSV_PREVIEW_ROWS:
-        for row in preview_rows:
-            if row not in rows:
-                rows.append(row)
-                if len(rows) >= CSV_PREVIEW_ROWS:
-                    break
-
-    rows = rows[:CSV_PREVIEW_ROWS]
-    with CSV_PREVIEW_PATH.open("w", newline="", encoding="utf-8") as handle:
+def write_csv(path, rows):
+    with path.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=CSV_PREVIEW_HEADERS)
         writer.writeheader()
         writer.writerows(rows)
+
+
+def write_preview_csv(preview_rows):
+    rows_by_type = {
+        "blood_bank": [],
+        "donor": [],
+        "inventory_transaction": [],
+    }
+
+    for row in preview_rows:
+        entity_type = row.get("entity_type")
+        if entity_type in rows_by_type:
+            rows_by_type[entity_type].append(row)
+
+    write_csv(CSV_BANKS_PATH, rows_by_type["blood_bank"])
+    write_csv(CSV_DONORS_PATH, rows_by_type["donor"])
+    write_csv(CSV_INVENTORY_PATH, rows_by_type["inventory_transaction"])
 
 
 # (banks_per_run removed — use BANKS_PER_RUN constant directly)
@@ -972,7 +967,9 @@ def main():
 
     try:
         write_preview_csv(preview_rows)
-        print(f"[CSV] Preview written -- {CSV_PREVIEW_PATH} ({min(len(preview_rows), CSV_PREVIEW_ROWS)} rows)")
+        print(f"[CSV] Blood banks written -- {CSV_BANKS_PATH} ({sum(1 for row in preview_rows if row.get('entity_type') == 'blood_bank')} rows)")
+        print(f"[CSV] Donors written -- {CSV_DONORS_PATH} ({sum(1 for row in preview_rows if row.get('entity_type') == 'donor')} rows)")
+        print(f"[CSV] Inventory transactions written -- {CSV_INVENTORY_PATH} ({sum(1 for row in preview_rows if row.get('entity_type') == 'inventory_transaction')} rows)")
     except Exception as exc:
         print(f"[CSV] ERROR: {exc}")
 

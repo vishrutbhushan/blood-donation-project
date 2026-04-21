@@ -4,9 +4,10 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.hemo.backend.dto.BloodBankDTO;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Objects;
+import java.util.Map;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -16,35 +17,7 @@ import org.springframework.web.client.RestClient;
 
 @Service
 public class BloodBankService {
-        private static final double SEARCH_RADIUS_KM = 5000.0;
-        private static final String NEAREST_BANKS_QUERY_TEMPLATE = """
-                        {
-                            "size": 20,
-                            "track_total_hits": false,
-                            "query": {
-                                "bool": {
-                                    "filter": [
-                                                                                { "exists": { "field": "location" } }
-                                                                                ,{ "geo_distance": { "distance": "%.1fkm", "location": { "lat": %.8f, "lon": %.8f } } }
-                                                                                %s
-                                    ],
-                                    "must_not": [
-                                        { "geo_distance": { "distance": "1m", "location": { "lat": 0, "lon": 0 } } }
-                                    ]
-                                }
-                            },
-                            "sort": [
-                                {
-                                    "_geo_distance": {
-                                        "location": { "lat": %.8f, "lon": %.8f },
-                                        "order": "asc",
-                                        "unit": "km",
-                                        "distance_type": "arc"
-                                    }
-                                }
-                            ]
-                        }
-                        """;
+    private static final int MAX_RESULTS = 20;
 
     private final RestClient elasticsearchClient;
 
@@ -58,8 +31,7 @@ public class BloodBankService {
 
     public List<BloodBankDTO> findNearestBloodBanks(Double userLatitude, Double userLongitude, String bloodGroup, String component) {
         try {
-            String optionalFilters = buildOptionalFilters(bloodGroup, component);
-            String queryBody = String.format(Locale.US, NEAREST_BANKS_QUERY_TEMPLATE, SEARCH_RADIUS_KM, userLatitude, userLongitude, optionalFilters);
+            Map<String, Object> queryBody = buildQueryBody(userLatitude, userLongitude, bloodGroup, component);
             EsSearchResponse response = elasticsearchClient.post()
                 .uri("/bb_inventory_current/_search")
                 .contentType(Objects.requireNonNull(MediaType.APPLICATION_JSON))
@@ -71,6 +43,53 @@ public class BloodBankService {
         } catch (Exception e) {
             return new ArrayList<>();
         }
+    }
+
+    private Map<String, Object> buildQueryBody(Double userLatitude, Double userLongitude, String bloodGroup, String component) {
+        List<Object> filters = new ArrayList<>();
+        filters.add(Map.of("exists", Map.of("field", "location")));
+
+        if (bloodGroup != null && !bloodGroup.isBlank()) {
+            filters.add(Map.of("term", Map.of("blood_group", bloodGroup.trim())));
+        }
+
+        if (component != null && !component.isBlank()) {
+            String normalizedComponent = component.trim();
+            filters.add(Map.of(
+                "bool",
+                Map.of(
+                    "should",
+                    List.of(
+                        Map.of("term", Map.of("component", normalizedComponent)),
+                        Map.of("term", Map.of("component_type", normalizedComponent)),
+                        Map.of("term", Map.of("blood_component", normalizedComponent))
+                    ),
+                    "minimum_should_match",
+                    1
+                )
+            ));
+        }
+
+        Map<String, Object> query = new LinkedHashMap<>();
+        query.put("size", MAX_RESULTS);
+        query.put("track_total_hits", false);
+        query.put("query", Map.of(
+            "bool",
+            Map.of(
+                "filter", filters,
+                "must_not", List.of(Map.of("geo_distance", Map.of("distance", "1m", "location", Map.of("lat", 0, "lon", 0))))
+            )
+        ));
+        query.put("sort", List.of(Map.of(
+            "_geo_distance",
+            Map.of(
+                "location", Map.of("lat", userLatitude, "lon", userLongitude),
+                "order", "asc",
+                "unit", "km",
+                "distance_type", "arc"
+            )
+        )));
+        return query;
     }
 
     private List<BloodBankDTO> toDtos(EsSearchResponse response) {
@@ -109,28 +128,6 @@ public class BloodBankService {
 
     private String emptyToBlank(String value) {
         return value == null ? "" : value;
-    }
-
-    private String buildOptionalFilters(String bloodGroup, String component) {
-        StringBuilder filters = new StringBuilder();
-        if (bloodGroup != null && !bloodGroup.isBlank()) {
-            filters.append(",\n                    { \"term\": { \"blood_group\": \"")
-                    .append(escape(bloodGroup.trim()))
-                    .append("\" } }");
-        }
-        if (component != null && !component.isBlank()) {
-            String escapedComponent = escape(component.trim());
-            filters.append(",\n                    { \"bool\": { \"should\": [")
-                    .append("{ \"term\": { \"component\": \"").append(escapedComponent).append("\" } },")
-                    .append("{ \"term\": { \"component_type\": \"").append(escapedComponent).append("\" } },")
-                    .append("{ \"term\": { \"blood_component\": \"").append(escapedComponent).append("\" } }")
-                    .append("], \"minimum_should_match\": 1 } }");
-        }
-        return filters.toString();
-    }
-
-    private String escape(String value) {
-        return value.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 
     private String emptyToDefault(String value, String defaultValue) {
