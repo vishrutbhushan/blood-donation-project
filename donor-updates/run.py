@@ -35,7 +35,8 @@ BATCH_SIZE = int(os.getenv("BATCH_SIZE", "10"))
 BLOOD_GROUP_DIST = {
     "O+": 37, "B+": 25, "A+": 22, "AB+": 7,
     "O-": 3, "B-": 3, "A-": 2, "AB-": 1,
-    "BBG": 0.000001,
+    "BOMBAY": 0.000001,
+    "RH NULL": 0.0000001,
 }
 BLOOD_GROUPS = list(BLOOD_GROUP_DIST.keys())
 BG_WEIGHTS = list(BLOOD_GROUP_DIST.values())
