@@ -18,9 +18,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 @Service
+@Slf4j
 public class EtlPipelineService {
     private final PincodeGeoMap pincodeGeoMap;
     private final ClickhouseLoader clickhouseLoader;
@@ -48,11 +50,14 @@ public class EtlPipelineService {
     }
 
     public synchronized String startInitialBulkLoad() {
+        log.info("api.enter etl.pipeline.bulk-start");
         initializeIfNeeded();
         if (bulkLoadDone) {
+            log.info("api.exit etl.pipeline.bulk-start result=bulk load already completed");
             return "bulk load already completed";
         }
         if (bulkLoadRunning) {
+            log.info("api.exit etl.pipeline.bulk-start result=bulk load already running");
             return "bulk load already running";
         }
 
@@ -68,12 +73,15 @@ public class EtlPipelineService {
         }, "etl-bulk-load");
         worker.setDaemon(true);
         worker.start();
+        log.info("api.exit etl.pipeline.bulk-start result=bulk load started");
         return "bulk load started";
     }
 
     public synchronized void runElasticIncremental() {
+        log.info("api.enter etl.pipeline.es-incremental");
         initializeIfNeeded();
         if (!bulkLoadDone || bulkLoadRunning) {
+            log.info("api.exit etl.pipeline.es-incremental skipped bulkDone={} bulkRunning={}", bulkLoadDone, bulkLoadRunning);
             return;
         }
 
@@ -89,16 +97,20 @@ public class EtlPipelineService {
             stateStore.setEsLastSyncTs(sourceHandler.sourceName(), now);
         }
         stateStore.save();
+        log.info("api.exit etl.pipeline.es-incremental");
     }
 
     public synchronized void runClickhouseDailyIncremental() {
+        log.info("api.enter etl.pipeline.ch-incremental");
         initializeIfNeeded();
         if (!bulkLoadDone || bulkLoadRunning) {
+            log.info("api.exit etl.pipeline.ch-incremental skipped bulkDone={} bulkRunning={}", bulkLoadDone, bulkLoadRunning);
             return;
         }
 
         LocalDate day = LocalDate.now(ZoneId.of(Constants.ETL_ZONE)).minusDays(1);
         processClickhouseDay(day, "incremental-ch");
+        log.info("api.exit etl.pipeline.ch-incremental day={}", day);
     }
 
     private synchronized void initializeIfNeeded() {
