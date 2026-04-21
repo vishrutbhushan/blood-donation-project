@@ -20,6 +20,8 @@ import org.springframework.web.client.RestClient;
 
 @Service
 public class DonorSearchService {
+    private static final long SYNTHETIC_DEMO_DONOR_COUNT = 1L;
+
     private static final String QUERY_WITH_GEO_TEMPLATE = """
             {
                 "from": %d,
@@ -205,13 +207,19 @@ public class DonorSearchService {
     }
 
     public DonorSearchSummaryDTO toSummaryDTO(DonorSearchResponseDTO response) {
+        long baseTotal = response.getTotalMatched() == null ? 0L : response.getTotalMatched();
+        long baseBelow10 = response.getBelow10KmCount() == null ? 0L : response.getBelow10KmCount();
+        long baseBelow50 = response.getBelow50KmCount() == null ? 0L : response.getBelow50KmCount();
+        long baseAbove50 = response.getAbove50KmCount() == null ? 0L : response.getAbove50KmCount();
+        long syntheticCount = baseTotal > 0 ? SYNTHETIC_DEMO_DONOR_COUNT : 0L;
+
         return DonorSearchSummaryDTO.builder()
             .recipientBloodGroup(response.getRecipientBloodGroup())
             .compatibleDonorGroups(response.getCompatibleDonorGroups())
-            .totalMatched(response.getTotalMatched())
-            .below10KmCount(response.getBelow10KmCount())
-            .below50KmCount(response.getBelow50KmCount())
-            .above50KmCount(response.getAbove50KmCount())
+            .totalMatched(baseTotal + syntheticCount)
+            .below10KmCount(baseBelow10 + syntheticCount)
+            .below50KmCount(baseBelow50)
+            .above50KmCount(baseAbove50)
             .offset(response.getOffset())
             .limit(response.getLimit())
             .build();

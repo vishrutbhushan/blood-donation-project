@@ -1,11 +1,8 @@
 import { createSlice } from '@reduxjs/toolkit';
 
 const initialForm = {
-  patientName: '',
-  phone: '',
   bloodGroup: '',
   bloodComponent: '',
-  hospitalName: '',
   hospitalPincode: '',
   unitsRequested: 1,
 };

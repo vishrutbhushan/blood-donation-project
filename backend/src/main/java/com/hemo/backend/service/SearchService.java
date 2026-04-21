@@ -32,7 +32,6 @@ public class SearchService {
 
         Search search = new Search();
         search.setUser(user);
-        search.setHospitalName(payload.getHospitalName() == null ? "" : payload.getHospitalName());
         search.setHospitalPincode(payload.getHospitalPincode() == null ? "" : payload.getHospitalPincode());
         search.setBloodGroup(payload.getBloodGroup() == null ? "" : payload.getBloodGroup());
         search.setBloodComponent(payload.getBloodComponent() == null ? "" : payload.getBloodComponent());
@@ -42,7 +41,6 @@ public class SearchService {
         return SearchResponseDTO.builder()
             .searchId(saved.getSearchId())
             .userId(saved.getUser().getUserId())
-            .hospitalName(saved.getHospitalName())
             .hospitalPincode(saved.getHospitalPincode())
             .bloodGroup(saved.getBloodGroup())
             .bloodComponent(saved.getBloodComponent())

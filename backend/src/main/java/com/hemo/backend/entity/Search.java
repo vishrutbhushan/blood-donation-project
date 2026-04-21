@@ -33,9 +33,6 @@ public class Search {
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
-    @Column(name = "hospital_name", length = 150)
-    private String hospitalName;
-
     @Column(name = "hospital_pincode", length = 10)
     private String hospitalPincode;
 

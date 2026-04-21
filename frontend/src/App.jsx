@@ -79,7 +79,6 @@ export default function App() {
   } = useSelector((state) => state.search);
   const {
     abhaId,
-    phone,
     name,
     otpSent,
     otpValue,
@@ -139,11 +138,8 @@ export default function App() {
 
   const canSearch = useMemo(() => {
     return (
-      form.patientName.trim() &&
-      /^\d{10}$/.test(form.phone.trim()) &&
       form.bloodGroup &&
       form.bloodComponent &&
-      form.hospitalName.trim() &&
       /^\d{6}$/.test(form.hospitalPincode.trim())
     );
   }, [form]);
@@ -343,7 +339,6 @@ export default function App() {
         const createdSearch = await apiRequest(`/api/backend/searches/${userId}`, {
           method: 'POST',
           body: JSON.stringify({
-            hospitalName: form.hospitalName.trim(),
             hospitalPincode: form.hospitalPincode.trim(),
             bloodGroup: form.bloodGroup,
             bloodComponent: form.bloodComponent,
@@ -461,8 +456,6 @@ export default function App() {
         {screen === 'blood-banks' && (
           <Paper className="panel" variant="outlined" elevation={0}>
             <Box className="form-grid">
-              <TextField label="Patient Name" value={form.patientName} onChange={(e) => updateSearchForm('patientName', e.target.value)} />
-              <TextField label="Phone" value={form.phone} onChange={(e) => updateSearchForm('phone', e.target.value)} />
               <FormControl>
                 <InputLabel>Blood Group</InputLabel>
                 <Select value={form.bloodGroup} label="Blood Group" onChange={(e) => updateSearchForm('bloodGroup', e.target.value)}>
@@ -477,7 +470,6 @@ export default function App() {
                   {referenceData.bloodComponents.map((component) => <MenuItem key={component} value={component}>{component}</MenuItem>)}
                 </Select>
               </FormControl>
-              <TextField label="Hospital" value={form.hospitalName} onChange={(e) => updateSearchForm('hospitalName', e.target.value)} />
               <TextField label="Pincode" value={form.hospitalPincode} onChange={(e) => updateSearchForm('hospitalPincode', e.target.value)} />
             </Box>
 

@@ -9,7 +9,6 @@ CREATE TABLE users (
 CREATE TABLE searches (
     search_id SERIAL PRIMARY KEY,
     user_id INT REFERENCES users(user_id) ON DELETE CASCADE,
-    hospital_name VARCHAR(150),
     hospital_pincode VARCHAR(10),
     blood_group VARCHAR(20),
     blood_component VARCHAR(20),

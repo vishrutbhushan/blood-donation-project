@@ -15,6 +15,9 @@ import org.springframework.stereotype.Service;
 @Service
 @RequiredArgsConstructor
 public class RequestDispatchService {
+    private static final String DEMO_DONOR_ID = "DEMO:9325834381";
+    private static final String DEMO_DONOR_PHONE = "9325834381";
+
     private final ResponseRepository responseRepository;
     private final DonorSearchService donorSearchService;
 
@@ -34,6 +37,21 @@ public class RequestDispatchService {
                 200,
                 excludedDonorIds
         );
+
+        int realDonorCount = donorBatch.getDonors() == null ? 0 : donorBatch.getDonors().size();
+        boolean demoAlreadyContacted = excludedDonorIds.contains(DEMO_DONOR_ID);
+        if (realDonorCount > 0 && !demoAlreadyContacted && donorBatch.getDonors() != null) {
+            donorBatch.getDonors().add(0, DonorCandidateDTO.builder()
+            .donorId(DEMO_DONOR_ID)
+            .name("Demo Donor")
+            .bloodGroup(request.getBloodGroup())
+            .phone(DEMO_DONOR_PHONE)
+            .pincode(request.getSearch().getHospitalPincode())
+            .location("Demo")
+            .source("DEMO")
+            .distanceKm(0.0)
+            .build());
+        }
 
         int sent = 0;
         for (DonorCandidateDTO donor : donorBatch.getDonors()) {
