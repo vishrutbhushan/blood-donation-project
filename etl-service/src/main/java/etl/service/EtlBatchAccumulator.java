@@ -70,19 +70,19 @@ public class EtlBatchAccumulator {
     }
 
     public List<BloodBank> collectLatestBanks() {
-        List<BloodBank> allBanks = new ArrayList<>();
+        Map<String, BloodBank> merged = new LinkedHashMap<>();
         for (Map<String, BloodBank> recordsById : banksBySource.values()) {
-            allBanks.addAll(recordsById.values());
+            mergeLatestBanksInto(merged, recordsById.values());
         }
-        return mergeLatestBanks(allBanks);
+        return new ArrayList<>(merged.values());
     }
 
     public List<Donor> collectLatestDonors(List<BloodBank> latestBanks) {
-        List<Donor> allDonors = new ArrayList<>();
+        Map<String, Donor> merged = new LinkedHashMap<>();
         for (Map<String, Donor> recordsById : donorsBySource.values()) {
-            allDonors.addAll(recordsById.values());
+            mergeLatestDonorsInto(merged, recordsById.values());
         }
-        List<Donor> latestDonors = mergeLatestDonors(allDonors);
+        List<Donor> latestDonors = new ArrayList<>(merged.values());
         resolveForeignKeys(latestDonors, latestBanks);
         return latestDonors;
     }
@@ -107,8 +107,7 @@ public class EtlBatchAccumulator {
         pendingInventoryBySource.clear();
     }
 
-    private List<BloodBank> mergeLatestBanks(List<BloodBank> records) {
-        Map<String, BloodBank> merged = new LinkedHashMap<>();
+    private void mergeLatestBanksInto(Map<String, BloodBank> merged, Iterable<BloodBank> records) {
         for (BloodBank row : records) {
             if (row.getSource() == null || row.getBankId() == null) {
                 continue;
@@ -119,11 +118,9 @@ public class EtlBatchAccumulator {
                 merged.put(key, row);
             }
         }
-        return new ArrayList<>(merged.values());
     }
 
-    private List<Donor> mergeLatestDonors(List<Donor> records) {
-        Map<String, Donor> merged = new LinkedHashMap<>();
+    private void mergeLatestDonorsInto(Map<String, Donor> merged, Iterable<Donor> records) {
         for (Donor row : records) {
             if (row.getSource() == null || row.getDonorId() == null) {
                 continue;
@@ -134,7 +131,6 @@ public class EtlBatchAccumulator {
                 merged.put(key, row);
             }
         }
-        return new ArrayList<>(merged.values());
     }
 
     private void resolveForeignKeys(List<Donor> donors, List<BloodBank> banks) {

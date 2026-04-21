@@ -17,12 +17,12 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
@@ -32,10 +32,11 @@ import org.springframework.web.client.RestClient;
 @Component
 public class ClickhouseLoader {
     private static final Logger log = LoggerFactory.getLogger(ClickhouseLoader.class);
+    private static final int BULK_INSERT_BATCH_SIZE = 500;
     private final RestClient clickhouse;
-    private final Set<String> seededSources = new HashSet<>();
-    private final Set<String> seededBloodGroups = new HashSet<>();
-    private final Set<String> seededComponents = new HashSet<>();
+    private final Set<String> seededSources = ConcurrentHashMap.newKeySet();
+    private final Set<String> seededBloodGroups = ConcurrentHashMap.newKeySet();
+    private final Set<String> seededComponents = ConcurrentHashMap.newKeySet();
 
     public ClickhouseLoader(RestClient.Builder builder) {
         this.clickhouse = builder
@@ -123,6 +124,10 @@ public class ClickhouseLoader {
             log.info("api.exit ClickhouseLoader.loadBanks");
             return;
         }
+
+        List<String> locationRows = new ArrayList<>();
+        List<String> bankRows = new ArrayList<>();
+        List<String> counterRows = new ArrayList<>();
         for (BloodBank b : banks) {
             int sourceId = sourceId(b.getSource());
             if (sourceId == 0) {
@@ -135,34 +140,17 @@ public class ClickhouseLoader {
             long version = versionOf(b.getUpdatedAt());
             int isDeleted = isDelete(b.getOp()) ? 1 : 0;
 
-            sql("INSERT INTO blood_ops.dim_location "
-                + "(location_id, pincode, city, state, street_or_address, latitude, longitude, updated_at) VALUES ("
-                + locationId + ","
-                + q(b.getPincode()) + ","
-                + q(b.getCity()) + ","
-                + q(b.getState()) + ","
-                + q(b.getAddress()) + ","
-                + (b.getLat() != null ? b.getLat() : "0.0") + ","
-                + (b.getLon() != null ? b.getLon() : "0.0") + ","
-                + dt(b.getUpdatedAt()) + ");");
-
-            sql("INSERT INTO blood_ops.dim_blood_bank "
-                + "(bank_id, source_id, source_bank_id, bank_name, category, phone, email, location_id, created_at, updated_at, is_deleted, version) VALUES ("
-                + bankId + ","
-                + sourceId + ","
-                + q(b.getBankId()) + ","
-                + q(b.getBankName()) + ","
-                + q(b.getCategory()) + ","
-                + q(b.getPhone()) + ","
-                + q(b.getEmail()) + ","
-                + locationId + ","
-                + dt(orElse(b.getCreatedAt(), b.getUpdatedAt())) + ","
-                + dt(b.getUpdatedAt()) + ","
-                + isDeleted + ","
-                + version + ")");
-
-            ingestCounter(b.getUpdatedAt(), b.getSource(), "incremental", "bank", 1);
+            locationRows.add("(" + locationId + "," + q(b.getPincode()) + "," + q(b.getCity()) + "," + q(b.getState()) + "," + q(b.getAddress()) + "," + (b.getLat() != null ? b.getLat() : "0.0") + "," + (b.getLon() != null ? b.getLon() : "0.0") + "," + dt(b.getUpdatedAt()) + ")");
+            bankRows.add("(" + bankId + "," + sourceId + "," + q(b.getBankId()) + "," + q(b.getBankName()) + "," + q(b.getCategory()) + "," + q(b.getPhone()) + "," + q(b.getEmail()) + "," + locationId + "," + dt(orElse(b.getCreatedAt(), b.getUpdatedAt())) + "," + dt(b.getUpdatedAt()) + "," + isDeleted + "," + version + ")");
+            counterRows.add(counterTuple(b.getUpdatedAt(), b.getSource(), "incremental", "bank", 1));
         }
+
+        flushInsertValues("INSERT INTO blood_ops.dim_location "
+            + "(location_id, pincode, city, state, street_or_address, latitude, longitude, updated_at) VALUES ", locationRows);
+        flushInsertValues("INSERT INTO blood_ops.dim_blood_bank "
+            + "(bank_id, source_id, source_bank_id, bank_name, category, phone, email, location_id, created_at, updated_at, is_deleted, version) VALUES ", bankRows);
+        flushInsertValues("INSERT INTO blood_ops.source_ingestion_hourly_agg "
+            + "(event_hour, source, api_name, record_type, record_count) VALUES ", counterRows);
 
         log.info("api.exit ClickhouseLoader.loadBanks");
     }
@@ -173,6 +161,11 @@ public class ClickhouseLoader {
             log.info("api.exit ClickhouseLoader.loadDonors");
             return;
         }
+
+        List<String> locationRows = new ArrayList<>();
+        List<String> donorRows = new ArrayList<>();
+        List<String> snapshotRows = new ArrayList<>();
+        List<String> counterRows = new ArrayList<>();
         for (Donor d : donors) {
             int sourceId = sourceId(d.getSource());
             if (sourceId == 0) {
@@ -190,59 +183,23 @@ public class ClickhouseLoader {
             long version = updatedAt.toInstant(ZoneOffset.UTC).toEpochMilli();
             int isDeleted = isDelete(d.getOp()) ? 1 : 0;
 
-            sql("INSERT INTO blood_ops.dim_location "
-                + "(location_id, pincode, city, state, street_or_address, latitude, longitude, updated_at) VALUES ("
-                + locationId + ","
-                + q(d.getPincodeCurrent()) + ","
-                + q(d.getCityCurrent()) + ","
-                + q(d.getStateCurrent()) + ","
-                + q(d.getAddressCurrent()) + ","
-                + (d.getLat() != null ? d.getLat() : "0.0") + ","
-                + (d.getLon() != null ? d.getLon() : "0.0") + ","
-                + dt(d.getUpdatedAt()) + ")");
-
-            sql("INSERT INTO blood_ops.dim_donor "
-                + "(donor_sk, source_id, source_donor_id, bank_id, donor_name, donor_identity_hash, phone, location_id, blood_group_id, age, last_donated_date, created_at, updated_at, is_deleted, version) VALUES ("
-                + donorSk + ","
-                + sourceId + ","
-                + q(d.getDonorId()) + ","
-                + bankId + ","
-                + q(d.getName()) + ","
-                + q(identityHash(d.getSource(), d.getDonorId(), d.getPhone())) + ","
-                + q(d.getPhone()) + ","
-                + locationId + ","
-                + bloodGroupId + ","
-                + age(d.getAge()) + ","
-                + dateOrDefault(d.getLastDonatedOn()) + ","
-                + dt(d.getUpdatedAt()) + ","
-                + dt(d.getUpdatedAt()) + ","
-                + isDeleted + ","
-                + version + ")");
+            locationRows.add("(" + locationId + "," + q(d.getPincodeCurrent()) + "," + q(d.getCityCurrent()) + "," + q(d.getStateCurrent()) + "," + q(d.getAddressCurrent()) + "," + (d.getLat() != null ? d.getLat() : "0.0") + "," + (d.getLon() != null ? d.getLon() : "0.0") + "," + dt(d.getUpdatedAt()) + ")");
+            donorRows.add("(" + donorSk + "," + sourceId + "," + q(d.getDonorId()) + "," + bankId + "," + q(d.getName()) + "," + q(identityHash(d.getSource(), d.getDonorId(), d.getPhone())) + "," + q(d.getPhone()) + "," + locationId + "," + bloodGroupId + "," + age(d.getAge()) + "," + dateOrDefault(d.getLastDonatedOn()) + "," + dt(d.getUpdatedAt()) + "," + dt(d.getUpdatedAt()) + "," + isDeleted + "," + version + ")");
 
             int eligible = eligibleDonor(d.getLastDonatedOn(), updatedAt) ? 1 : 0;
             int donorCount = isDeleted == 1 ? 0 : 1;
-
-            sql("INSERT INTO blood_ops.fact_donor_snapshot "
-                + "(donor_fact_id, source_id, source_system, donor_sk, bank_id, location_id, blood_group_id, event_time_id, event_date_id, age, donor_count, eligible_donor_count, is_deleted, last_donated_date, snapshot_updated_at, version) VALUES ("
-                + stableUInt64("fact-donor:" + d.getSource() + ":" + d.getDonorId() + ":" + version) + ","
-                + sourceId + ","
-                + q(d.getSource()) + ","
-                + donorSk + ","
-                + bankId + ","
-                + locationId + ","
-                + bloodGroupId + ","
-                + toEventTimeId(updatedAt) + ","
-                + toEventDateId(updatedAt) + ","
-                + age(d.getAge()) + ","
-                + donorCount + ","
-                + eligible + ","
-                + isDeleted + ","
-                + dateOrDefault(d.getLastDonatedOn()) + ","
-                + dt(d.getUpdatedAt()) + ","
-                + version + ")");
-
-            ingestCounter(d.getUpdatedAt(), d.getSource(), "incremental", "donor", 1);
+            snapshotRows.add("(" + stableUInt64("fact-donor:" + d.getSource() + ":" + d.getDonorId() + ":" + version) + "," + sourceId + "," + q(d.getSource()) + "," + donorSk + "," + bankId + "," + locationId + "," + bloodGroupId + "," + toEventTimeId(updatedAt) + "," + toEventDateId(updatedAt) + "," + age(d.getAge()) + "," + donorCount + "," + eligible + "," + isDeleted + "," + dateOrDefault(d.getLastDonatedOn()) + "," + dt(d.getUpdatedAt()) + "," + version + ")");
+            counterRows.add(counterTuple(d.getUpdatedAt(), d.getSource(), "incremental", "donor", 1));
         }
+
+        flushInsertValues("INSERT INTO blood_ops.dim_location "
+            + "(location_id, pincode, city, state, street_or_address, latitude, longitude, updated_at) VALUES ", locationRows);
+        flushInsertValues("INSERT INTO blood_ops.dim_donor "
+            + "(donor_sk, source_id, source_donor_id, bank_id, donor_name, donor_identity_hash, phone, location_id, blood_group_id, age, last_donated_date, created_at, updated_at, is_deleted, version) VALUES ", donorRows);
+        flushInsertValues("INSERT INTO blood_ops.fact_donor_snapshot "
+            + "(donor_fact_id, source_id, source_system, donor_sk, bank_id, location_id, blood_group_id, event_time_id, event_date_id, age, donor_count, eligible_donor_count, is_deleted, last_donated_date, snapshot_updated_at, version) VALUES ", snapshotRows);
+        flushInsertValues("INSERT INTO blood_ops.source_ingestion_hourly_agg "
+            + "(event_hour, source, api_name, record_type, record_count) VALUES ", counterRows);
 
         log.info("api.exit ClickhouseLoader.loadDonors");
     }
@@ -274,6 +231,7 @@ public class ClickhouseLoader {
         }
 
         long version = System.currentTimeMillis();
+        List<String> factRows = new ArrayList<>();
         for (List<InventoryTransaction> group : grouped.values()) {
             group.sort(Comparator.comparing(txn -> TimeUtil.toDateTime(txn.getEventTimestamp())));
             InventoryTransaction first = group.get(0);
@@ -315,25 +273,12 @@ public class ClickhouseLoader {
             seedSource(sourceId, first.getSource());
             seedComponent(first.getComponent());
             long bankId = bankId(first.getSource(), first.getBankId());
-
-            sql("INSERT INTO blood_ops.fact_inventory_day "
-                + "(event_date, source_id, source_system, bank_id, blood_group, component, opening_balance_units, inflow_units, outflow_units, "
-                + "adjustment_units, closing_balance_units, donation_events_count, withdrawal_events_count, version) VALUES ("
-                + "toDate('" + esc(day) + "'),"
-                + sourceId + ","
-                + q(first.getSource()) + ","
-                + bankId + ","
-                + q(normalizeBloodGroup(first.getBloodGroup())) + ","
-                + q(first.getComponent()) + ","
-                + openingBalanceUnits + ","
-                + inflowUnits + ","
-                + outflowUnits + ","
-                + adjustmentUnits + ","
-                + lastBalance + ","
-                + donationEvents + ","
-                + withdrawalEvents + ","
-                + version + ")");
+            factRows.add("(toDate('" + esc(day) + "')," + sourceId + "," + q(first.getSource()) + "," + bankId + "," + q(normalizeBloodGroup(first.getBloodGroup())) + "," + q(first.getComponent()) + "," + openingBalanceUnits + "," + inflowUnits + "," + outflowUnits + "," + adjustmentUnits + "," + lastBalance + "," + donationEvents + "," + withdrawalEvents + "," + version + ")");
         }
+
+        flushInsertValues("INSERT INTO blood_ops.fact_inventory_day "
+            + "(event_date, source_id, source_system, bank_id, blood_group, component, opening_balance_units, inflow_units, outflow_units, "
+            + "adjustment_units, closing_balance_units, donation_events_count, withdrawal_events_count, version) VALUES ", factRows);
 
             log.info("api.exit ClickhouseLoader.loadInventoryDay");
     }
@@ -367,7 +312,6 @@ public class ClickhouseLoader {
     public void recordLoadAudit(
             String batchId,
             String sourceSystem,
-            String targetSystem,
             String targetDataset,
             long startedAtMillis,
             long endedAtMillis,
@@ -438,6 +382,22 @@ public class ClickhouseLoader {
             .body(Objects.requireNonNull(query, "query"))
             .retrieve()
             .body(String.class);
+    }
+
+    private void flushInsertValues(String insertPrefix, List<String> valueRows) {
+        if (valueRows.isEmpty()) {
+            return;
+        }
+        for (int start = 0; start < valueRows.size(); start += BULK_INSERT_BATCH_SIZE) {
+            int end = Math.min(start + BULK_INSERT_BATCH_SIZE, valueRows.size());
+            sql(insertPrefix + String.join(",", valueRows.subList(start, end)));
+        }
+    }
+
+    private String counterTuple(String updatedAt, String source, String apiName, String recordType, int count) {
+        LocalDateTime at = TimeUtil.toDateTime(updatedAt).truncatedTo(ChronoUnit.HOURS);
+        String eventHour = dt(at.format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
+        return "(" + eventHour + "," + q(source) + "," + q(apiName) + "," + q(recordType) + "," + count + ")";
     }
 
     private void seedSource(int sourceId, String sourceCode) {

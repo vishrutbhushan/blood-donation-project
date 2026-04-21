@@ -23,6 +23,8 @@ import org.springframework.web.client.RestClientResponseException;
 @Component
 public class ElasticsearchLoader {
     private static final Logger log = LoggerFactory.getLogger(ElasticsearchLoader.class);
+    private static final int BULK_BATCH_SIZE = 500;
+    private static final MediaType NDJSON = MediaType.valueOf("application/x-ndjson");
     private static final DateTimeFormatter STORE = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
         private static final String BANK_TEMPLATE = """
                 {
@@ -115,6 +117,8 @@ public class ElasticsearchLoader {
             }
         }
 
+        List<String> bulkLines = new ArrayList<>();
+
         for (BloodBank b : banks) {
             String bankKey = sourceAwareId(b.getSource(), b.getBankId());
             if (Constants.OP_DELETE.equalsIgnoreCase(str(b.getOp()))) {
@@ -123,6 +127,7 @@ public class ElasticsearchLoader {
             }
 
             List<InventoryTransaction> bankInventory = inventoryByBank.getOrDefault(bankKey, List.of());
+            deleteBankInventoryDocs(b);
             if (bankInventory.isEmpty()) {
                 continue;
             }
@@ -134,14 +139,11 @@ public class ElasticsearchLoader {
                 String updatedAt = str(txn.getUpdatedAt()).isBlank() ? str(b.getUpdatedAt()) : str(txn.getUpdatedAt());
 
                 Map<String, Object> doc = toBankInventoryDoc(b, bloodGroup, component, unitsAvailable, updatedAt);
-                elastic.post()
-                    .uri("/{index}/_doc/{id}", Constants.ELASTIC_INDEX_BANKS, bankInventoryDocId(b.getSource(), b.getBankId(), bloodGroup, component))
-                    .contentType(Objects.requireNonNull(MediaType.APPLICATION_JSON))
-                    .body(Objects.requireNonNull(jsonUtil.toJson(doc)))
-                    .retrieve()
-                    .toBodilessEntity();
+                addBulkIndex(bulkLines, Constants.ELASTIC_INDEX_BANKS, bankInventoryDocId(b.getSource(), b.getBankId(), bloodGroup, component), doc);
             }
         }
+
+        flushBulk(bulkLines);
 
         log.info("api.exit ElasticsearchLoader.loadBanks");
     }
@@ -189,10 +191,12 @@ public class ElasticsearchLoader {
             log.info("api.exit ElasticsearchLoader.loadDonors");
             return;
         }
+
+        List<String> bulkLines = new ArrayList<>();
         for (Donor d : donors) {
             String id = sourceAwareId(d.getSource(), d.getDonorId());
             if (Constants.OP_DELETE.equalsIgnoreCase(str(d.getOp()))) {
-                elastic.delete().uri("/{index}/_doc/{id}", Constants.ELASTIC_INDEX_DONORS, id).retrieve().toBodilessEntity();
+                addBulkDelete(bulkLines, Constants.ELASTIC_INDEX_DONORS, id);
             } else {
                 Map<String, Object> doc = new LinkedHashMap<>();
                 doc.put("source", str(d.getSource()));
@@ -211,14 +215,11 @@ public class ElasticsearchLoader {
                 doc.put("last_donated_at", str(d.getLastDonatedOn()));
                 doc.put("availability_status", true);
 
-                elastic.post()
-                    .uri("/{index}/_doc/{id}", Constants.ELASTIC_INDEX_DONORS, id)
-                    .contentType(Objects.requireNonNull(MediaType.APPLICATION_JSON))
-                    .body(Objects.requireNonNull(jsonUtil.toJson(doc)))
-                    .retrieve()
-                    .toBodilessEntity();
+                addBulkIndex(bulkLines, Constants.ELASTIC_INDEX_DONORS, id, doc);
             }
         }
+
+        flushBulk(bulkLines);
 
         log.info("api.exit ElasticsearchLoader.loadDonors");
     }
@@ -251,6 +252,40 @@ public class ElasticsearchLoader {
             .body(Objects.requireNonNull(body))
             .retrieve()
             .toBodilessEntity();
+    }
+
+    private void addBulkIndex(List<String> bulkLines, String indexName, String id, Map<String, Object> doc) {
+        bulkLines.add("{\"index\":{\"_index\":\"" + escJson(indexName) + "\",\"_id\":\"" + escJson(id) + "\"}}");
+        bulkLines.add(Objects.requireNonNull(jsonUtil.toJson(doc)));
+    }
+
+    private void addBulkDelete(List<String> bulkLines, String indexName, String id) {
+        bulkLines.add("{\"delete\":{\"_index\":\"" + escJson(indexName) + "\",\"_id\":\"" + escJson(id) + "\"}}");
+    }
+
+    private void flushBulk(List<String> bulkLines) {
+        if (bulkLines.isEmpty()) {
+            return;
+        }
+
+        for (int start = 0; start < bulkLines.size(); start += BULK_BATCH_SIZE * 2) {
+            int end = Math.min(start + BULK_BATCH_SIZE * 2, bulkLines.size());
+            StringBuilder body = new StringBuilder();
+            for (String line : bulkLines.subList(start, end)) {
+                body.append(line).append('\n');
+            }
+
+            String response = elastic.post()
+                .uri("/_bulk")
+                .contentType(NDJSON)
+                .body(body.toString())
+                .retrieve()
+                .body(String.class);
+
+            if (response != null && response.contains("\"errors\":true")) {
+                throw new RuntimeException("elasticsearch bulk write failed: " + response);
+            }
+        }
     }
 
     private void deleteIndex(String indexName) {
