@@ -60,7 +60,6 @@ public class ClickhouseLoader {
             + "opening_balance_units Int32,"
             + "inflow_units Int32,"
             + "outflow_units Int32,"
-            + "adjustment_units Int32,"
             + "closing_balance_units Int32,"
             + "donation_events_count UInt32,"
             + "withdrawal_events_count UInt32,"
@@ -216,7 +215,7 @@ public class ClickhouseLoader {
 
         Map<String, List<InventoryTransaction>> grouped = new HashMap<>();
         for (InventoryTransaction transaction : transactions) {
-            if (transaction == null || isDelete(transaction.getOp())) {
+            if (transaction == null) {
                 continue;
             }
             if (transaction.getSource() == null || transaction.getBankId() == null || transaction.getBloodGroup() == null || transaction.getComponent() == null) {
@@ -239,7 +238,6 @@ public class ClickhouseLoader {
 
             int inflowUnits = 0;
             int outflowUnits = 0;
-            int adjustmentUnits = 0;
             int donationEvents = 0;
             int withdrawalEvents = 0;
 
@@ -256,8 +254,6 @@ public class ClickhouseLoader {
                         outflowUnits += Math.abs(delta);
                     }
                     withdrawalEvents += 1;
-                } else if ("ADJUSTMENT".equals(type)) {
-                    adjustmentUnits += delta;
                 }
             }
 
@@ -273,12 +269,12 @@ public class ClickhouseLoader {
             seedSource(sourceId, first.getSource());
             seedComponent(first.getComponent());
             long bankId = bankId(first.getSource(), first.getBankId());
-            factRows.add("(toDate('" + esc(day) + "')," + sourceId + "," + q(first.getSource()) + "," + bankId + "," + q(normalizeBloodGroup(first.getBloodGroup())) + "," + q(first.getComponent()) + "," + openingBalanceUnits + "," + inflowUnits + "," + outflowUnits + "," + adjustmentUnits + "," + lastBalance + "," + donationEvents + "," + withdrawalEvents + "," + version + ")");
+            factRows.add("(toDate('" + esc(day) + "')," + sourceId + "," + q(first.getSource()) + "," + bankId + "," + q(normalizeBloodGroup(first.getBloodGroup())) + "," + q(first.getComponent()) + "," + openingBalanceUnits + "," + inflowUnits + "," + outflowUnits + "," + lastBalance + "," + donationEvents + "," + withdrawalEvents + "," + version + ")");
         }
 
         flushInsertValues("INSERT INTO blood_ops.fact_inventory_day "
             + "(event_date, source_id, source_system, bank_id, blood_group, component, opening_balance_units, inflow_units, outflow_units, "
-            + "adjustment_units, closing_balance_units, donation_events_count, withdrawal_events_count, version) VALUES ", factRows);
+            + "closing_balance_units, donation_events_count, withdrawal_events_count, version) VALUES ", factRows);
 
             log.info("api.exit ClickhouseLoader.loadInventoryDay");
     }

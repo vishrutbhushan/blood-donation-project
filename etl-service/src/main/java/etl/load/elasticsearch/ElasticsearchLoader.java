@@ -18,6 +18,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClientResponseException;
 
 @Component
@@ -237,12 +238,16 @@ public class ElasticsearchLoader {
             + "{\"term\":{\"blood_bank_id\":\"" + escJson(str(bank.getBankId())) + "\"}}"
             + "]}}}";
 
-        elastic.post()
-            .uri("/{index}/_delete_by_query?refresh=true", Constants.ELASTIC_INDEX_BANKS)
-            .contentType(Objects.requireNonNull(MediaType.APPLICATION_JSON))
-            .body(Objects.requireNonNull(body))
-            .retrieve()
-            .toBodilessEntity();
+        try {
+            elastic.post()
+                .uri("/{index}/_delete_by_query?refresh=true", Constants.ELASTIC_INDEX_BANKS)
+                .contentType(Objects.requireNonNull(MediaType.APPLICATION_JSON))
+                .body(Objects.requireNonNull(body))
+                .retrieve()
+                .toBodilessEntity();
+        } catch (HttpClientErrorException.NotFound ignored) {
+            log.debug("Skipping bank inventory cleanup because {} does not exist yet", Constants.ELASTIC_INDEX_BANKS);
+        }
     }
 
     private void putTemplate(String templateName, String body) {

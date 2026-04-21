@@ -147,7 +147,6 @@ CREATE TABLE IF NOT EXISTS blood_ops.fact_inventory_day (
     opening_balance_units Int32,
     inflow_units Int32,
     outflow_units Int32,
-    adjustment_units Int32,
     closing_balance_units Int32,
     donation_events_count UInt32,
     withdrawal_events_count UInt32,
@@ -242,7 +241,6 @@ CREATE TABLE IF NOT EXISTS blood_ops.agg_inventory_1w_day (
     event_date Date,
     inflow_units Int64,
     outflow_units Int64,
-    adjustment_units Int64,
     closing_units Int64,
     donation_events UInt64,
     withdrawal_events UInt64
@@ -258,7 +256,6 @@ SELECT
     event_date,
     sum(toInt64(inflow_units)) AS inflow_units,
     sum(toInt64(outflow_units)) AS outflow_units,
-    sum(toInt64(adjustment_units)) AS adjustment_units,
     sum(toInt64(closing_balance_units)) AS closing_units,
     sum(toUInt64(donation_events_count)) AS donation_events,
     sum(toUInt64(withdrawal_events_count)) AS withdrawal_events
@@ -270,7 +267,6 @@ CREATE TABLE IF NOT EXISTS blood_ops.agg_inventory_2w_day_source (
     source_id UInt8,
     inflow_units Int64,
     outflow_units Int64,
-    adjustment_units Int64,
     closing_units Int64,
     donation_events UInt64,
     withdrawal_events UInt64
@@ -287,7 +283,6 @@ SELECT
     source_id,
     sum(toInt64(inflow_units)) AS inflow_units,
     sum(toInt64(outflow_units)) AS outflow_units,
-    sum(toInt64(adjustment_units)) AS adjustment_units,
     sum(toInt64(closing_balance_units)) AS closing_units,
     sum(toUInt64(donation_events_count)) AS donation_events,
     sum(toUInt64(withdrawal_events_count)) AS withdrawal_events
@@ -300,7 +295,6 @@ CREATE TABLE IF NOT EXISTS blood_ops.agg_inventory_3w_day_source_bank (
     bank_id UInt64,
     inflow_units Int64,
     outflow_units Int64,
-    adjustment_units Int64,
     closing_units Int64,
     donation_events UInt64,
     withdrawal_events UInt64
@@ -318,7 +312,6 @@ SELECT
     bank_id,
     sum(toInt64(inflow_units)) AS inflow_units,
     sum(toInt64(outflow_units)) AS outflow_units,
-    sum(toInt64(adjustment_units)) AS adjustment_units,
     sum(toInt64(closing_balance_units)) AS closing_units,
     sum(toUInt64(donation_events_count)) AS donation_events,
     sum(toUInt64(withdrawal_events_count)) AS withdrawal_events

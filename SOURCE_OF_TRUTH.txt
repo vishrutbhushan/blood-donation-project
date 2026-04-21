@@ -197,7 +197,7 @@ CLICKHOUSE (`Clickhouse/resources/schema_clickhouse.sql`)
 - blood_ops.dim_donor: donor_sk, source_id, source_donor_id, bank_id, donor_name, donor_identity_hash, phone, location_id, blood_group_id, age, last_donated_date, created_at, updated_at, is_deleted, version
 - blood_ops.dim_date: date_id, dt, year, quarter, month, day, iso_week
 - blood_ops.dim_time: time_id, event_time, event_date_id, hour, minute
-- blood_ops.fact_inventory_day: event_date, source_id, source_system, bank_id, blood_group, component, opening_balance_units, inflow_units, outflow_units, adjustment_units, closing_balance_units, donation_events_count, withdrawal_events_count, updated_at, version
+- blood_ops.fact_inventory_day: event_date, source_id, source_system, bank_id, blood_group, component, opening_balance_units, inflow_units, outflow_units, closing_balance_units, donation_events_count, withdrawal_events_count, updated_at, version
 - blood_ops.fact_donor_snapshot: donor_fact_id, source_id, source_system, donor_sk, bank_id, location_id, blood_group_id, event_time_id, event_date_id, age, donor_count, eligible_donor_count, is_deleted, last_donated_date, snapshot_updated_at, ingested_at, version
 - blood_ops.fact_donor_day: event_date, source_id, source_system, bank_id, blood_group_id, total_donors, eligible_donors, updated_at, version
 - blood_ops.fact_ingestion_event: event_time_id, event_date_id, source_id, api_name, record_type, success_count, error_count, total_count
@@ -296,7 +296,6 @@ Path 4 - ClickHouse day-grain flow
 	opening_balance_units = first(`running_balance_after`) - first(`units_delta`)
 	inflow_units = sum positive deltas where `transaction_type=INFLOW`
 	outflow_units = sum absolute negative deltas where `transaction_type=OUTFLOW`
-	adjustment_units = sum deltas where `transaction_type=ADJUSTMENT`
 	closing_balance_units = last(`running_balance_after`)
 	donation_events_count = count(`transaction_type=INFLOW`)
 	withdrawal_events_count = count(`transaction_type=OUTFLOW`)

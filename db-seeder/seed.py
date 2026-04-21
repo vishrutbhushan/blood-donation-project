@@ -562,7 +562,7 @@ def generate_inventory_transactions_batch(source, all_bb_ids, components, target
         bb_id = random.choice(all_bb_ids)
         bg = pick_blood_group()
         component = random.choice(components)
-        txn_type = random.choices(["INFLOW", "OUTFLOW", "ADJUSTMENT"], weights=[45, 45, 10], k=1)[0]
+        txn_type = random.choices(["INFLOW", "OUTFLOW"], weights=[50, 50], k=1)[0]
 
         event_time = rnd_inventory_updated_at()
         updated_at = event_time
@@ -584,10 +584,7 @@ def generate_inventory_transactions_batch(source, all_bb_ids, components, target
             else:
                 delta = -random.randint(1, min(running_balance, max(1, running_balance // 2)))
         else:
-            raw_delta = random.randint(-3, 3)
-            delta = raw_delta if raw_delta != 0 else 1
-            if running_balance + delta < 0:
-                delta = -running_balance
+            delta = -random.randint(1, min(running_balance, max(1, running_balance // 2)))
 
         running_balance = max(0, running_balance + delta)
         sequence += 1
