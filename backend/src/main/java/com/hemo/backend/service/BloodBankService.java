@@ -18,11 +18,16 @@ import org.springframework.web.client.RestClient;
 @Service
 public class BloodBankService {
     private static final int MAX_RESULTS = 20;
+    private static final int FETCH_SIZE = 200;
 
     private final RestClient elasticsearchClient;
+    private final BloodCompatibilityService bloodCompatibilityService;
 
-        public BloodBankService(@Qualifier("elasticsearchRestClient") RestClient elasticsearchClient) {
+    public BloodBankService(
+            @Qualifier("elasticsearchRestClient") RestClient elasticsearchClient,
+            BloodCompatibilityService bloodCompatibilityService) {
         this.elasticsearchClient = elasticsearchClient;
+        this.bloodCompatibilityService = bloodCompatibilityService;
     }
 
     public List<BloodBankDTO> findNearestBloodBanks(Double userLatitude, Double userLongitude) {
@@ -50,7 +55,10 @@ public class BloodBankService {
         filters.add(Map.of("exists", Map.of("field", "location")));
 
         if (bloodGroup != null && !bloodGroup.isBlank()) {
-            filters.add(Map.of("term", Map.of("blood_group", bloodGroup.trim())));
+            List<String> compatibleGroups = bloodCompatibilityService.compatibleDonorGroups(bloodGroup);
+            if (!compatibleGroups.isEmpty()) {
+                filters.add(Map.of("terms", Map.of("blood_group", compatibleGroups)));
+            }
         }
 
         if (component != null && !component.isBlank()) {
@@ -71,7 +79,7 @@ public class BloodBankService {
         }
 
         Map<String, Object> query = new LinkedHashMap<>();
-        query.put("size", MAX_RESULTS);
+        query.put("size", FETCH_SIZE);
         query.put("track_total_hits", false);
         query.put("query", Map.of(
             "bool",
@@ -93,9 +101,9 @@ public class BloodBankService {
     }
 
     private List<BloodBankDTO> toDtos(EsSearchResponse response) {
-        List<BloodBankDTO> banks = new ArrayList<>();
+        Map<String, BloodBankDTO> banks = new LinkedHashMap<>();
         if (response == null || response.getHits() == null || response.getHits().getHits() == null) {
-            return banks;
+            return new ArrayList<>();
         }
 
         for (EsHit row : response.getHits().getHits()) {
@@ -103,27 +111,40 @@ public class BloodBankService {
             if (source == null) {
                 continue;
             }
-            BloodBankDTO bank = BloodBankDTO.builder()
-                .bankId(source.getBlood_bank_id())
-                .sourceId(emptyToBlank(source.getSource()))
-                .sourceBankId(emptyToBlank(source.getSource_record_id()))
-                .bankName(emptyToBlank(source.getBlood_bank_name()))
-                .category(emptyToBlank(source.getCategory()))
-                .phone(emptyToBlank(source.getContact_number()))
-                .email(emptyToDefault(source.getEmail(), "N/A"))
-                .pincode(emptyToBlank(source.getPincode()))
-                .city(emptyToBlank(source.getCity()))
-                .state(emptyToBlank(source.getState()))
-                .address(emptyToBlank(source.getAddress()))
-                .latitude(source.getLocation() == null || source.getLocation().getLat() == null ? 0.0 : source.getLocation().getLat())
-                .longitude(source.getLocation() == null || source.getLocation().getLon() == null ? 0.0 : source.getLocation().getLon())
-                .distanceKm(row.getSort() == null || row.getSort().isEmpty() ? 0.0 : row.getSort().get(0))
-                .build();
 
-            banks.add(bank);
+            String bankKey = emptyToBlank(source.getSource()) + ":" + emptyToBlank(source.getBlood_bank_id() == null ? null : String.valueOf(source.getBlood_bank_id()));
+            BloodBankDTO bank = banks.get(bankKey);
+            if (bank == null) {
+                bank = BloodBankDTO.builder()
+                    .bankId(source.getBlood_bank_id())
+                    .sourceId(emptyToBlank(source.getSource()))
+                    .sourceBankId(emptyToBlank(source.getSource_record_id()))
+                    .bankName(emptyToBlank(source.getBlood_bank_name()))
+                    .category(emptyToBlank(source.getCategory()))
+                    .phone(emptyToBlank(source.getContact_number()))
+                    .email(emptyToDefault(source.getEmail(), "N/A"))
+                    .pincode(emptyToBlank(source.getPincode()))
+                    .city(emptyToBlank(source.getCity()))
+                    .state(emptyToBlank(source.getState()))
+                    .address(emptyToBlank(source.getAddress()))
+                    .latitude(source.getLocation() == null || source.getLocation().getLat() == null ? 0.0 : source.getLocation().getLat())
+                    .longitude(source.getLocation() == null || source.getLocation().getLon() == null ? 0.0 : source.getLocation().getLon())
+                    .distanceKm(row.getSort() == null || row.getSort().isEmpty() ? 0.0 : row.getSort().get(0))
+                    .compatibleStock(new ArrayList<>())
+                    .build();
+                banks.put(bankKey, bank);
+            }
+
+            if (source.getBlood_group() != null && source.getComponent() != null) {
+                bank.getCompatibleStock().add(BloodBankDTO.CompatibleStockDTO.builder()
+                    .bloodGroup(emptyToBlank(source.getBlood_group()))
+                    .component(emptyToBlank(source.getComponent()))
+                    .unitsAvailable(source.getUnits_available() == null ? 0 : source.getUnits_available())
+                    .build());
+            }
         }
 
-        return banks;
+        return new ArrayList<>(banks.values()).subList(0, Math.min(MAX_RESULTS, banks.size()));
     }
 
     private String emptyToBlank(String value) {
@@ -176,6 +197,11 @@ public class BloodBankService {
         private String state;
         private String address;
         private EsLocation location;
+        @JsonProperty("blood_group")
+        private String blood_group;
+        private String component;
+        @JsonProperty("units_available")
+        private Integer units_available;
     }
 
     @Data

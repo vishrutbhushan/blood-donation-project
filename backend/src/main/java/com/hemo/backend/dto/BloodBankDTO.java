@@ -1,5 +1,6 @@
 package com.hemo.backend.dto;
 
+import java.util.List;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -24,4 +25,15 @@ public class BloodBankDTO {
     private Double latitude;
     private Double longitude;
     private Double distanceKm;
+    private List<CompatibleStockDTO> compatibleStock;
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class CompatibleStockDTO {
+        private String bloodGroup;
+        private String component;
+        private Integer unitsAvailable;
+    }
 }

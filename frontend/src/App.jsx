@@ -254,6 +254,7 @@ export default function App() {
         distanceKm: Number(row.distanceKm || 0),
         bloodGroup: group || '-',
         component: component || '-',
+        compatibleStock: Array.isArray(row.compatibleStock) ? row.compatibleStock : [],
       }))
       .sort((left, right) => left.distanceKm - right.distanceKm);
   }
@@ -498,6 +499,7 @@ export default function App() {
                         <TableCell>Category</TableCell>
                         <TableCell>Pincode</TableCell>
                         <TableCell>Distance (km)</TableCell>
+                        <TableCell>Compatible stock</TableCell>
                         <TableCell>Address</TableCell>
                         <TableCell>Contact</TableCell>
                         <TableCell>Source</TableCell>
@@ -511,6 +513,19 @@ export default function App() {
                           <TableCell>{bank.category}</TableCell>
                           <TableCell>{bank.pincode}</TableCell>
                           <TableCell>{Number.isFinite(bank.distanceKm) ? bank.distanceKm.toFixed(2) : '0.00'}</TableCell>
+                          <TableCell>
+                            {bank.compatibleStock.length > 0 ? (
+                              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.25 }}>
+                                {bank.compatibleStock.map((stock, stockIdx) => (
+                                  <Typography key={`${bank.name}-${stock.bloodGroup}-${stock.component}-${stockIdx}`} variant="caption" component="span">
+                                    {stock.bloodGroup} {stock.component} = {stock.unitsAvailable} units
+                                  </Typography>
+                                ))}
+                              </Box>
+                            ) : (
+                              '-'
+                            )}
+                          </TableCell>
                           <TableCell>{bank.address}</TableCell>
                           <TableCell>{bank.contact}</TableCell>
                           <TableCell>{bank.source}</TableCell>
