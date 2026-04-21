@@ -16,8 +16,9 @@ import org.springframework.stereotype.Service;
 @Service
 @RequiredArgsConstructor
 public class RequestDispatchService {
-    private static final String DEMO_DONOR_ID = "DEMO:9325834381";
-    private static final String DEMO_DONOR_PHONE = "9325834381";
+    private static final String DEMO_DONOR_ID = "DEMO:9889206245";
+    private static final String DEMO_DONOR_PHONE = "9889206245";
+    private static final String FIXED_TEST_PHONE = "9889206245";
 
     private final ResponseRepository responseRepository;
     private final DonorSearchService donorSearchService;
@@ -70,24 +71,24 @@ public class RequestDispatchService {
             contact_number.setPhoneNumber(donor.getPhone());
             contact_number.setBloodGroup(donor.getBloodGroup());
             contact_number.setLocation(donor.getLocation());
-            contact_number.setResponseStatus("NO");
             responseRepository.save(contact_number);
 
-            // Send WhatsApp notification to donor
-            if (donor.getPhone() != null && !donor.getPhone().isBlank()) {
+            // Only the demo donor gets one real WhatsApp message; the rest stay as logs.
+            if (DEMO_DONOR_ID.equals(donor.getDonorId())) {
                 try {
                     sendWhatsAppToDonor(
-                        donor.getPhone(),
+                        FIXED_TEST_PHONE,
                         request.getBloodGroup(),
                         request.getSearch().getHospitalName(),
                         request.getSearch().getHospitalPincode()
                     );
                 } catch (Exception e) {
-                    System.err.println("WhatsApp failed for donor "
+                    System.err.println("WhatsApp failed for demo donor "
                         + donor.getDonorId() + ": " + e.getMessage());
                 }
             } else {
-                System.err.println("No phone number for donor: " + donor.getDonorId());
+                System.out.println("Skipped WhatsApp send for donor " + donor.getDonorId()
+                    + " phone=" + donor.getPhone());
             }
 
             sent++;

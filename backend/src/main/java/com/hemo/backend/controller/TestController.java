@@ -17,7 +17,7 @@ public class TestController {
         log.info("api.enter test.send-sms");
 
         // 🔴 Your phone number (hardcoded)
-        String to = "whatsapp:+919325834381";
+        String to = "whatsapp:+919889206245";
 
         // 🔴 Twilio sandbox number
         String from = "whatsapp:+14155238886";

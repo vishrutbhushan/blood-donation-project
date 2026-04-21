@@ -549,7 +549,7 @@ def rnd_inventory_updated_at() -> datetime:
     return rnd_dt_between(INVENTORY_DATE_START, INVENTORY_DATE_END)
 
 
-def generate_inventory_transactions_batch(source, all_bb_ids, components, target_count):
+def generate_inventory_transactions_batch(source, all_bb_ids, components, target_count, preview_rows=None):
     """
     Generate `target_count` inventory transactions spread across all banks.
     updated_at is uniformly random between Jan 1 2024 and today+2.
@@ -595,6 +595,21 @@ def generate_inventory_transactions_batch(source, all_bb_ids, components, target
             source_event_id, bb_id, donor_id, bg, component,
             txn_type, delta, running_balance, expiry, event_time, updated_at,
         ))
+        if preview_rows is not None:
+            preview_record(
+                preview_rows,
+                source=source.upper(),
+                entity_type="inventory_transaction",
+                bank_id=bb_id,
+                record_id=source_event_id,
+                blood_group=bg,
+                component=component,
+                quantity=abs(delta),
+                units_available=running_balance,
+                event_time=event_time,
+                updated_at=updated_at,
+                notes=txn_type,
+            )
         generated += 1
 
         if len(batch) >= BATCH_SIZE:
@@ -742,7 +757,7 @@ def seed_redcross(conn, preview_rows):
     all_bb_ids_for_inv = [row[0] for row in cur.fetchall()]
     print(f"[Red Cross] Generating {INVENTORY_TXN_PER_RUN:,} inventory transactions (updated_at: {INVENTORY_DATE_START} → {INVENTORY_DATE_END}) ...")
     inv_inserted = 0
-    for batch in generate_inventory_transactions_batch("redcross", all_bb_ids_for_inv, REDCROSS_COMPONENTS, INVENTORY_TXN_PER_RUN):
+    for batch in generate_inventory_transactions_batch("redcross", all_bb_ids_for_inv, REDCROSS_COMPONENTS, INVENTORY_TXN_PER_RUN, preview_rows):
         execute_values(
             cur,
             """INSERT INTO inventory_transaction
@@ -869,7 +884,7 @@ def seed_who(conn, preview_rows):
     all_bb_ids_for_inv = [row[0] for row in cur.fetchall()]
     print(f"[WHO] Generating {INVENTORY_TXN_PER_RUN:,} inventory transactions (updated_at: {INVENTORY_DATE_START} → {INVENTORY_DATE_END}) ...")
     inv_inserted = 0
-    for batch in generate_inventory_transactions_batch("who", all_bb_ids_for_inv, WHO_COMPONENTS, INVENTORY_TXN_PER_RUN):
+    for batch in generate_inventory_transactions_batch("who", all_bb_ids_for_inv, WHO_COMPONENTS, INVENTORY_TXN_PER_RUN, preview_rows):
         execute_values(
             cur,
             """INSERT INTO inventory_transaction

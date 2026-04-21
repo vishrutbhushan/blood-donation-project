@@ -23,7 +23,7 @@ public class DonorWebhookController {
         value = "/respond",
         consumes = MediaType.APPLICATION_FORM_URLENCODED_VALUE
     )
-    public ResponseEntity<String> donorRespond(
+    public ResponseEntity<Void> donorRespond(
         @RequestParam("From") String from,
         @RequestParam("Body") String body
     ) {
@@ -42,9 +42,7 @@ public class DonorWebhookController {
 
         log.info("api.exit donor.respond phone={}", donorPhone);
 
-        // Must return empty TwiML — tells Twilio no reply SMS needed
-        return ResponseEntity.ok(
-            "<?xml version='1.0' encoding='UTF-8'?><Response></Response>"
-        );
+        // Return an empty response so Twilio does not send any message back.
+        return ResponseEntity.ok().build();
     }
 }

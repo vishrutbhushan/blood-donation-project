@@ -68,7 +68,7 @@ public interface ResponseRepository extends JpaRepository<Response, Long> {
             SELECT rp
             FROM Response rp
             WHERE rp.phoneNumber = :phoneNumber
-              AND rp.responseStatus = 'NO'
+                                                        AND rp.responseStatus IS NULL
             ORDER BY rp.respondedAt DESC
             """)
     List<Response> findPendingByPhone(@Param("phoneNumber") String phoneNumber);

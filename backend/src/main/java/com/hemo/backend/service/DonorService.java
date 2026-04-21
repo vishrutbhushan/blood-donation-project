@@ -17,6 +17,8 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class DonorService {
 
+    private static final String FIXED_REQUESTOR_PHONE = "9325834381";
+
     private final ResponseRepository responseRepository;
     private final RequestRepository requestRepository;
 
@@ -27,7 +29,7 @@ public class DonorService {
     public void handleDonorReply(String donorPhone, String reply) {
 
         // Find the most recent pending response for this donor
-        // Pending = responseStatus is "NO" (notified but not yet replied)
+        // Pending = responseStatus is NULL (notified but not yet replied)
         List<Response> pending = responseRepository.findPendingByPhone(donorPhone);
 
         if (pending.isEmpty()) {
@@ -51,11 +53,9 @@ public class DonorService {
             requestRepository.save(request);
 
             // Send donor contact to requestor via WhatsApp
-            String requestorPhone = request.getSearch().getUser().getPhone();
-
             try {
                 Message.creator(
-                    new PhoneNumber("whatsapp:+91" + requestorPhone),
+                    new PhoneNumber("whatsapp:+91" + FIXED_REQUESTOR_PHONE),
                     new PhoneNumber("whatsapp:" + twilioWhatsappNumber),
                     "HEMO-CONNECT: A donor has agreed to help!\n" +
                     "Request ID: " + request.getRequestId() + "\n" +

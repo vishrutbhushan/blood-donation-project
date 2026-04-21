@@ -94,6 +94,12 @@ Direct backend controller base routes:
 - `/requests/*`
 - `/responses/*`
 
+Donor WhatsApp webhook:
+
+- `POST /api/donor/respond`
+- This endpoint must be exposed on the backend service, not the frontend.
+- Twilio Sandbox should point its inbound WhatsApp webhook to `https://<ngrok-host>/api/donor/respond`.
+
 Source-system routes (ETL-facing):
 
 - Redcross: `/api/redcross/centres`, `/api/redcross/centres/incremental`, `/api/redcross/people`, `/api/redcross/people/incremental`, `/incremental`
@@ -152,3 +158,13 @@ Full table/column and dataflow mapping list is maintained in `SOURCE_OF_TRUTH.tx
 - Keep controller logging in `api.enter` and `api.exit` format.
 - Keep API DTO contracts typed (no map-based public payloads).
 - Keep ETL orchestration in service classes; keep application entrypoint minimal.
+
+## Donor Reply Setup
+
+1. Start the backend on `8080`.
+2. Start ngrok against the backend port, for example: `ngrok http 8080`.
+3. Copy the public ngrok URL.
+4. In Twilio Sandbox, set the inbound WhatsApp webhook to `https://<ngrok-host>/api/donor/respond`.
+5. Send a donor message from WhatsApp with `YES` or `NO`.
+6. In demo mode, only the hardcoded donor/requestor numbers receive real WhatsApp sends; the rest of the 20-contact batch is logged only.
+7. A pending response row is created with `response_status = NULL`; when `YES` arrives, that row becomes visible to the requestor through `/requests/user/{userId}/responses`.
