@@ -57,10 +57,6 @@ public class BloodBankService {
         this.bloodCompatibilityService = bloodCompatibilityService;
     }
 
-    public List<BloodBankDTO> findNearestBloodBanks(Double userLatitude, Double userLongitude) {
-        return findNearestBloodBanks(userLatitude, userLongitude, null, null);
-    }
-
     public List<BloodBankDTO> findNearestBloodBanks(Double userLatitude, Double userLongitude, String bloodGroup, String component) {
         try {
             String queryBody = buildQueryBody(userLatitude, userLongitude, bloodGroup, component);
