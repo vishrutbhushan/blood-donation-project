@@ -49,6 +49,10 @@ CREATE TABLE IF NOT EXISTS blood_ops.dim_source (
 ENGINE = ReplacingMergeTree(updated_at)
 ORDER BY source_id;
 
+INSERT INTO blood_ops.dim_source (source_id, source_code, source_name, is_active, updated_at) VALUES
+(1, 'redcross', 'REDCROSS', 1, now()),
+(2, 'who', 'WHO', 1, now());
+
 CREATE TABLE IF NOT EXISTS blood_ops.dim_blood_group (
     blood_group_id UInt8,
     blood_group LowCardinality(String),
@@ -57,6 +61,18 @@ CREATE TABLE IF NOT EXISTS blood_ops.dim_blood_group (
 ENGINE = ReplacingMergeTree(updated_at)
 ORDER BY blood_group_id;
 
+INSERT INTO blood_ops.dim_blood_group (blood_group_id, blood_group, updated_at) VALUES
+(1, 'A+', now()),
+(2, 'A-', now()),
+(3, 'B+', now()),
+(4, 'B-', now()),
+(5, 'AB+', now()),
+(6, 'AB-', now()),
+(7, 'O+', now()),
+(8, 'O-', now()),
+(9, 'BOMBAY', now()),
+(10, 'RH NULL', now());
+
 CREATE TABLE IF NOT EXISTS blood_ops.dim_component (
     component_id UInt8,
     component_name LowCardinality(String),
@@ -64,6 +80,14 @@ CREATE TABLE IF NOT EXISTS blood_ops.dim_component (
 )
 ENGINE = ReplacingMergeTree(updated_at)
 ORDER BY component_id;
+
+INSERT INTO blood_ops.dim_component (component_id, component_name, updated_at) VALUES
+(1, 'WHOLE BLOOD', now()),
+(2, 'PACKED RBC', now()),
+(3, 'PLATELETS', now()),
+(4, 'PLASMA', now()),
+(5, 'FRESH FROZEN PLASMA', now()),
+(6, 'CRYOPRECIPITATE', now());
 
 CREATE TABLE IF NOT EXISTS blood_ops.dim_location (
     location_id UInt64,
@@ -127,6 +151,19 @@ CREATE TABLE IF NOT EXISTS blood_ops.dim_date (
 ENGINE = MergeTree
 ORDER BY date_id;
 
+INSERT INTO blood_ops.dim_date (date_id, dt, year, quarter, month, day, iso_week)
+SELECT
+    toUInt32(formatDateTime(d, '%Y%m%d')) AS date_id,
+    d AS dt,
+    toUInt16(toYear(d)) AS year,
+    toUInt8(toQuarter(d)) AS quarter,
+    toUInt8(toMonth(d)) AS month,
+    toUInt8(toDayOfMonth(d)) AS day,
+    toUInt8(toWeek(d, 1)) AS iso_week
+FROM (
+    SELECT addDays(toDate('2015-01-01'), number) AS d FROM numbers(7670)
+);
+
 CREATE TABLE IF NOT EXISTS blood_ops.dim_time (
     time_id UInt32,
     event_time DateTime,
@@ -136,6 +173,15 @@ CREATE TABLE IF NOT EXISTS blood_ops.dim_time (
 )
 ENGINE = MergeTree
 ORDER BY time_id;
+
+INSERT INTO blood_ops.dim_time (time_id, event_time, event_date_id, hour, minute)
+SELECT
+    toUInt32(intDiv(number, 60) * 100 + (number % 60)) AS time_id,
+    toDateTime('1970-01-01 00:00:00') + toIntervalMinute(number) AS event_time,
+    toUInt32(19700101) AS event_date_id,
+    toUInt8(intDiv(number, 60)) AS hour,
+    toUInt8(number % 60) AS minute
+FROM numbers(1440);
 
 CREATE TABLE IF NOT EXISTS blood_ops.fact_inventory_day (
     event_date Date,
@@ -408,3 +454,18 @@ CREATE TABLE IF NOT EXISTS blood_ops.meta_load_audit (
 ENGINE = MergeTree
 PARTITION BY toYYYYMM(started_at)
 ORDER BY (started_at, source_system, target_dataset, batch_id);
+
+INSERT INTO blood_ops.meta_dataset (dataset_name, physical_table, source_system, is_active, created_at) VALUES
+('redcross_blood_bank', 'redcross_db.blood_bank', 'redcross', 1, now()),
+('redcross_blood_donor', 'redcross_db.donor', 'redcross', 1, now()),
+('who_blood_bank', 'who_db.blood_bank', 'who', 1, now()),
+('who_blood_donor', 'who_db.donor', 'who', 1, now()),
+('dim_source', 'blood_ops.dim_source', 'etl', 1, now()),
+('dim_location', 'blood_ops.dim_location', 'etl', 1, now()),
+('dim_blood_bank', 'blood_ops.dim_blood_bank', 'etl', 1, now()),
+('dim_donor', 'blood_ops.dim_donor', 'etl', 1, now()),
+('fact_inventory_day', 'blood_ops.fact_inventory_day', 'etl', 1, now()),
+('fact_donor_snapshot', 'blood_ops.fact_donor_snapshot', 'etl', 1, now()),
+('fact_donor_day', 'blood_ops.fact_donor_day', 'etl', 1, now()),
+('fact_ingestion_event', 'blood_ops.fact_ingestion_event', 'etl', 1, now()),
+('source_ingestion_hourly_agg', 'blood_ops.source_ingestion_hourly_agg', 'etl', 1, now());
