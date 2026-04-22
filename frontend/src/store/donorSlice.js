@@ -2,8 +2,6 @@ import { createSlice } from '@reduxjs/toolkit';
 
 export const initialDonorState = {
   abhaId: '',
-  phone: '',
-  name: '',
   otpSent: false,
   otpValue: '',
   otpVerified: false,
@@ -26,8 +24,6 @@ const donorSlice = createSlice({
       state.abhaId = action.payload;
     },
     setProfile(state, action) {
-      state.name = action.payload.name || '';
-      state.phone = action.payload.phone || '';
     },
     setOtpSent(state, action) {
       state.otpSent = action.payload;
@@ -56,8 +52,6 @@ const donorSlice = createSlice({
     },
     resetDonorOtp(state) {
       state.abhaId = '';
-      state.phone = '';
-      state.name = '';
       state.otpSent = false;
       state.otpValue = '';
       state.otpVerified = false;

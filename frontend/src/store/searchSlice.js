@@ -12,8 +12,6 @@ export const initialSearchState = {
   banks: [],
   userId: null,
   searchId: null,
-  lastRequestId: null,
-  activeRequest: false,
   requests: [],
   responses: [],
 };
@@ -35,12 +33,6 @@ const searchSlice = createSlice({
     setSearchId(state, action) {
       state.searchId = action.payload;
     },
-    setLastRequestId(state, action) {
-      state.lastRequestId = action.payload;
-    },
-    setActiveRequest(state, action) {
-      state.activeRequest = action.payload;
-    },
     setRequests(state, action) {
       state.requests = action.payload;
     },
@@ -58,8 +50,6 @@ export const {
   setBanks,
   setUserId,
   setSearchId,
-  setLastRequestId,
-  setActiveRequest,
   setRequests,
   setResponses,
   resetSearchState,

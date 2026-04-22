@@ -29,8 +29,6 @@ public class DonorService {
     @Transactional
     public void handleDonorReply(String donorPhone, String reply) {
 
-        // Find the most recent pending response for this donor
-        // Pending = responseStatus is NULL (notified but not yet replied)
         List<Response> pending = responseRepository.findPendingByPhone(donorPhone);
 
         if (pending.isEmpty()) {
@@ -38,22 +36,18 @@ public class DonorService {
             return;
         }
 
-        // Take the most recent one
         Response response = pending.get(0);
         Request request = response.getRequest();
 
         if (reply.equals("YES")) {
 
-            // Mark response as accepted
             response.setResponseStatus("YES");
             response.setRespondedAt(LocalDateTime.now());
             responseRepository.save(response);
 
-            // Close the request after a donor accepts it
             request.setStatus("CLOSED");
             requestRepository.save(request);
 
-            // Send donor contact to requestor via WhatsApp
             try {
                 Message.creator(
                     new PhoneNumber("whatsapp:+91" + fixedRequestorPhone),
@@ -76,7 +70,6 @@ public class DonorService {
 
         } else if (reply.equals("NO")) {
 
-            // Keep response status schema-valid for a donor decline
             response.setResponseStatus("NO");
             response.setRespondedAt(LocalDateTime.now());
             responseRepository.save(response);
@@ -85,7 +78,6 @@ public class DonorService {
                 + request.getRequestId());
 
         } else {
-            // Donor replied something other than YES/NO — ignore
             System.out.println("Unrecognised reply from " + donorPhone + ": " + reply);
         }
     }

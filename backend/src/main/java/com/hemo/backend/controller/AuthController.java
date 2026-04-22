@@ -63,7 +63,6 @@ public class AuthController {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid OTP");
         }
 
-        // One-time OTP consumption on successful verification.
         otpStore.remove(dto.getAbhaId());
 
         AuthProfileDTO profile = profileFromAbha(dto.getAbhaId());

@@ -56,10 +56,10 @@ public class RequestDispatchService {
         boolean demoAlreadyContacted = excludedDonorIds.contains(demoId);
         if (!demoAlreadyContacted) {
             dispatchDonors.add(0, DonorCandidateDTO.builder()
-            .donorId(demoId)
-            .name(demoDonorName)
+                .donorId(demoId)
+                .name(demoDonorName)
                 .bloodGroup(request.getBloodGroup())
-            .phone(demoDonorPhone)
+                .phone(demoDonorPhone)
                 .pincode(request.getSearch().getHospitalPincode())
                 .location("Demo")
                 .source("DEMO")
@@ -83,7 +83,6 @@ public class RequestDispatchService {
             contact_number.setLocation(donor.getLocation());
             responseRepository.save(contact_number);
 
-            // Only the demo donor gets one real WhatsApp message; the rest stay as logs.
             if (demoId.equals(donor.getDonorId())) {
                 try {
                     sendWhatsAppToDonor(

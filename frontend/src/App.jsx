@@ -33,9 +33,7 @@ import ReRequestConfirmDialog from './components/ReRequestConfirmDialog';
 import apiRequest from './lib/apiRequest';
 import { clearStatus, setDonorLoginOpen, setError, setLoading, setScreen, setStatusText } from './store/uiSlice';
 import {
-  setActiveRequest,
   setBanks,
-  setLastRequestId,
   setRequests,
   setResponses,
   setSearchField,
@@ -52,7 +50,6 @@ import {
   setOtpSent,
   setOtpValue,
   setOtpVerified,
-  setProfile,
   resetDonorOtp,
 } from './store/donorSlice';
 import { resetSearchState } from './store/searchSlice';
@@ -90,14 +87,11 @@ export default function App() {
     banks,
     userId,
     searchId,
-    lastRequestId,
-    activeRequest,
     requests,
     responses,
   } = useSelector((state) => state.search);
   const {
     abhaId,
-    name,
     otpSent,
     otpValue,
     otpVerified,
@@ -218,12 +212,10 @@ export default function App() {
     if (!currentUserId) {
       return;
     }
-    const [active, requestRows, responseRows] = await Promise.all([
-      apiRequest(`/api/backend/requests/user/${currentUserId}/active`).catch(() => ({ active: false })),
+    const [requestRows, responseRows] = await Promise.all([
       apiRequest(`/api/backend/requests/user/${currentUserId}`).catch(() => []),
       apiRequest(`/api/backend/requests/user/${currentUserId}/responses`).catch(() => []),
     ]);
-    dispatch(setActiveRequest(Boolean(active.active)));
     dispatch(setRequests(requestRows));
     dispatch(setResponses(responseRows));
   }
@@ -247,11 +239,10 @@ export default function App() {
     dispatch(clearStatus());
 
     try {
-      const result = await apiRequest('/api/backend/auth/send-otp', {
+      await apiRequest('/api/backend/auth/send-otp', {
         method: 'POST',
         body: JSON.stringify({ abhaId: abhaId.trim() }),
       });
-      dispatch(setProfile({ name: result.name, phone: result.phone }));
       dispatch(setOtpSent(true));
       dispatch(setStatusText('OTP sent'));
     } catch {
@@ -271,11 +262,10 @@ export default function App() {
     dispatch(clearStatus());
 
     try {
-      const verified = await apiRequest('/api/backend/auth/verify-otp', {
+      await apiRequest('/api/backend/auth/verify-otp', {
         method: 'POST',
         body: JSON.stringify({ abhaId: abhaId.trim(), otp: otpValue.trim() }),
       });
-      dispatch(setProfile({ name: verified.name, phone: verified.phone }));
       dispatch(setOtpVerified(true));
 
       const user = await apiRequest('/api/backend/users/get-or-create', {
@@ -421,7 +411,7 @@ export default function App() {
         dispatch(setSearchId(resolvedSearchId));
       }
 
-      const request = await apiRequest(`/api/backend/requests/${resolvedSearchId}`, {
+      await apiRequest(`/api/backend/requests/${resolvedSearchId}`, {
         method: 'POST',
         body: JSON.stringify({
           bloodGroup: donorForm.bloodGroup,
@@ -430,7 +420,6 @@ export default function App() {
           matchedCount,
         }),
       });
-      dispatch(setLastRequestId(request.requestId));
       dispatch(setConfirmOpen(false));
       dispatch(setStatusText('Request created'));
       await refreshUserState();
