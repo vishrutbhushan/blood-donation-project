@@ -174,10 +174,17 @@ services:
   clickhouse:
     image: clickhouse/clickhouse-server:24.8
     container_name: hemo-clickhouse
+
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+
     env_file:
       - ./.env
+
     environment:
       SINGLE_MODE: ${SINGLE_MODE}
+
     command:
       - bash
       - -lc
@@ -188,11 +195,13 @@ services:
           cp /config-src/cluster.full.xml /etc/clickhouse-server/config.d/01-cluster.xml
         fi
         exec /entrypoint.sh
+
     volumes:
       - ch_data_1:/var/lib/clickhouse
       - ./Clickhouse/resources/schema_clickhouse.sql:/docker-entrypoint-initdb.d/01_schema_clickhouse.sql:ro
       - ./Clickhouse/resources/cluster.xml:/config-src/cluster.full.xml:ro
       - ./Clickhouse/resources/cluster.single.xml:/config-src/cluster.single.xml:ro
+
     healthcheck:
       test: ["CMD-SHELL", "clickhouse-client --query 'SELECT 1' >/dev/null"]
       interval: 10s

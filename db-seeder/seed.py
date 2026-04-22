@@ -31,10 +31,10 @@ from psycopg2.extras import execute_values
 # ---------------------------------------------------------------------------
 # Tune per run — adjust without restarting Docker
 # ---------------------------------------------------------------------------
-BANKS_PER_RUN  = 50               # new blood banks to insert for each source per invocation
-DONORS_PER_RUN = 2_500            # new donors to insert for each source per invocation
-INVENTORY_TXN_PER_RUN = 5_000     # inventory transactions to insert for each source per run
-BATCH_SIZE     = 10_000           # rows per executemany batch (keeps memory bounded)
+BANKS_PER_RUN  = 500               # new blood banks to insert for each source per invocation
+DONORS_PER_RUN = 1000000            # new donors to insert for each source per invocation
+INVENTORY_TXN_PER_RUN = 1000000     # inventory transactions to insert for each source per run
+BATCH_SIZE     = 50000           # rows per executemany batch (keeps memory bounded)
 CSV_BANKS_PATH = Path(__file__).resolve().with_name("generated_seed_blood_banks.csv")
 CSV_DONORS_PATH = Path(__file__).resolve().with_name("generated_seed_donors.csv")
 CSV_INVENTORY_PATH = Path(__file__).resolve().with_name("generated_seed_inventory_transactions.csv")
