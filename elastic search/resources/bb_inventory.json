@@ -22,9 +22,15 @@
         "location": { "type": "geo_point" },
         "category": { "type": "keyword" },
         "email": { "type": "keyword" },
-        "blood_group": { "type": "keyword" },
-        "component": { "type": "keyword" },
-        "units_available": { "type": "integer" }
+        "available_stock": {
+          "type": "nested",
+          "properties": {
+            "blood_group": { "type": "keyword" },
+            "component": { "type": "keyword" },
+            "units_available": { "type": "integer" },
+            "updated_at": { "type": "date" }
+          }
+        }
       }
     }
   }
