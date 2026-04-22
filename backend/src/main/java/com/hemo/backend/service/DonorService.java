@@ -55,8 +55,7 @@ public class DonorService {
                     "HEMO-CONNECT: A donor has agreed to help!\n" +
                     "Request ID: " + request.getRequestId() + "\n" +
                     "Donor Name: " + response.getDonorName() + "\n" +
-                    "Donor Contact: +91" + donorPhone + "\n" +
-                    "Please contact them as soon as possible."
+                    "Donor Contact: +91" + donorPhone + "\n"
                 ).create();
 
                 System.out.println("Requestor notified for request: " + request.getRequestId());
