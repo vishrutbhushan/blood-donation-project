@@ -1,6 +1,5 @@
 package com.hemo.backend.service;
 
-import com.hemo.backend.dto.DispatchResultDTO;
 import com.hemo.backend.dto.DonorSearchResponseDTO;
 import com.hemo.backend.dto.DonorSearchSummaryDTO;
 import com.hemo.backend.dto.RequestDTO;
@@ -85,11 +84,6 @@ public class RequestService {
         saved.setLastNotifiedAt(LocalDateTime.now());
         saved = requestRepository.save(saved);
         return toRequestSummary(saved, reRequestState(saved));
-    }
-
-    @Transactional
-    public DispatchResultDTO dispatchNextTwenty(@NonNull Long requestId) {
-        throw new AppException(HttpStatus.CONFLICT, "Only re-request action is allowed");
     }
 
     @Transactional(readOnly = true)
