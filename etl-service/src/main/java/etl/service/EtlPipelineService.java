@@ -145,7 +145,6 @@ public class EtlPipelineService {
             return;
         }
         stateStore.load();
-        clickhouseLoader.ensureAnalyticsTables();
         elasticsearchLoader.bootstrap();
         bulkLoadDone = stateStore.isBulkDone();
         initialized = true;
