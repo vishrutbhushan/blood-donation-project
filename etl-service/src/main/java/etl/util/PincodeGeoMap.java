@@ -24,6 +24,14 @@ public class PincodeGeoMap {
         return geoMap.get(pin.trim());
     }
 
+    public GeoPoint resolve(String pin) {
+        GeoPoint point = get(pin);
+        if (point == null) {
+            return new GeoPoint(0.0, 0.0);
+        }
+        return point;
+    }
+
     private Map<String, GeoPoint> loadFromResource() {
         try (InputStream is = getClass().getClassLoader().getResourceAsStream("pincode-map.json")) {
             if (is == null) {

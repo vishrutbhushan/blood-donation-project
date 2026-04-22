@@ -10,12 +10,17 @@ import etl.model.EtlBatch;
 import etl.model.InventoryTransaction;
 import etl.util.PincodeGeoMap;
 import etl.util.TimeUtil;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
+
+import static etl.util.JsonNodeUtil.optional;
+import static etl.util.JsonNodeUtil.pickRecords;
+import static etl.util.JsonNodeUtil.required;
+import static etl.util.JsonNodeUtil.toInteger;
+import static etl.util.JsonNodeUtil.truthy;
 
 @Component
 public class RedcrossTransformPipeline {
@@ -124,7 +129,7 @@ public class RedcrossTransformPipeline {
         String bankId = required(raw, BANK_FIELDS.get("bank_id"));
         String bankName = required(raw, BANK_FIELDS.get("bank_name"));
         String pincode = required(raw, BANK_FIELDS.get("pincode"));
-        GeoPoint geo = geo(pincode, geoMap);
+        GeoPoint geo = geoMap.resolve(pincode);
         String updatedAt = TimeUtil.formatStore(required(raw, BANK_FIELDS.get("updated")));
         String createdAt = optional(raw, "created_at");
         String op = truthy(raw.get("deleted")) || truthy(raw.get("is_deleted")) ? Constants.OP_DELETE : Constants.OP_UPSERT;
@@ -152,7 +157,7 @@ public class RedcrossTransformPipeline {
         String name = required(raw, DONOR_FIELDS.get("name"));
         String bloodGroup = required(raw, DONOR_FIELDS.get("blood_group"));
         String pincode = required(raw, DONOR_FIELDS.get("pincode_current"));
-        GeoPoint geo = geo(pincode, geoMap);
+        GeoPoint geo = geoMap.resolve(pincode);
         String updatedAt = TimeUtil.formatStore(required(raw, DONOR_FIELDS.get("updated")));
         String op = truthy(raw.get("deleted")) || truthy(raw.get("is_deleted")) ? Constants.OP_DELETE : Constants.OP_UPSERT;
         return Donor.builder()
@@ -175,71 +180,6 @@ public class RedcrossTransformPipeline {
                 .updatedAt(updatedAt)
                 .op(op)
                 .build();
-    }
-
-    private List<JsonNode> pickRecords(JsonNode payload, String key) {
-        return list(payload.path(key));
-    }
-
-    private GeoPoint geo(String pin, PincodeGeoMap geoMap) {
-        GeoPoint point = geoMap.get(pin);
-        if (point == null) {
-            return new GeoPoint(0.0, 0.0);
-        }
-        return point;
-    }
-
-    private String required(JsonNode raw, String key) {
-        JsonNode v = raw.path(key);
-        if (v.isMissingNode() || v.isNull() || v.asText().isBlank()) {
-            throw new RuntimeException("missing required field: " + key);
-        }
-        return v.asText();
-    }
-
-    private String optional(JsonNode raw, String key) {
-        JsonNode v = raw.path(key);
-        if (v.isMissingNode() || v.isNull()) {
-            return null;
-        }
-        return v.asText();
-    }
-
-    private boolean truthy(JsonNode v) {
-        if (v == null || v.isMissingNode() || v.isNull()) {
-            return false;
-        }
-        if (v.isBoolean()) {
-            return v.asBoolean();
-        }
-        String s = v.asText().toLowerCase();
-        return "true".equals(s) || "1".equals(s) || "yes".equals(s);
-    }
-
-    private Integer toInteger(JsonNode value) {
-        if (value == null || value.isMissingNode() || value.isNull()) {
-            return null;
-        }
-        if (value.isNumber()) {
-            return value.asInt();
-        }
-        String text = value.asText().trim();
-        if (text.isEmpty()) {
-            return null;
-        }
-        return Integer.parseInt(text);
-    }
-
-    private List<JsonNode> list(JsonNode value) {
-        List<JsonNode> out = new ArrayList<>();
-        if (value != null && value.isArray()) {
-            for (JsonNode x : value) {
-                if (x.isObject()) {
-                    out.add(x);
-                }
-            }
-        }
-        return out;
     }
 
 }

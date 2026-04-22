@@ -5,8 +5,6 @@ import etl.model.BloodBank;
 import etl.model.Donor;
 import etl.model.InventoryTransaction;
 import etl.util.JsonUtil;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -21,12 +19,17 @@ import org.springframework.web.client.RestClient;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClientResponseException;
 
+import static etl.util.ElasticsearchUtil.bankInventoryDocId;
+import static etl.util.ElasticsearchUtil.escJson;
+import static etl.util.ElasticsearchUtil.isoDateTime;
+import static etl.util.ElasticsearchUtil.sourceAwareId;
+import static etl.util.ElasticsearchUtil.str;
+
 @Component
 public class ElasticsearchLoader {
     private static final Logger log = LoggerFactory.getLogger(ElasticsearchLoader.class);
     private static final int BULK_BATCH_SIZE = 500;
     private static final MediaType NDJSON = MediaType.valueOf("application/x-ndjson");
-    private static final DateTimeFormatter STORE = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
         private static final String BANK_TEMPLATE = """
                 {
                     "index_patterns": ["bb_inventory_current*"],
@@ -173,10 +176,6 @@ public class ElasticsearchLoader {
         return doc;
     }
 
-    private String bankInventoryDocId(String source, String bankId, String bloodGroup, String component) {
-        return sourceAwareId(source, bankId) + ":" + str(bloodGroup).replace(" ", "_") + ":" + str(component).replace(" ", "_");
-    }
-
     public void bootstrap() {
         log.info("api.enter ElasticsearchLoader.bootstrap");
         putTemplate("bb_inventory_current_template", BANK_TEMPLATE);
@@ -223,10 +222,6 @@ public class ElasticsearchLoader {
         flushBulk(bulkLines);
 
         log.info("api.exit ElasticsearchLoader.loadDonors");
-    }
-
-    private String sourceAwareId(String source, String id) {
-        return str(source) + ":" + str(id);
     }
 
     private void deleteBankInventoryDocs(BloodBank bank) {
@@ -303,19 +298,4 @@ public class ElasticsearchLoader {
         }
     }
 
-    private String escJson(String value) {
-        return value.replace("\\", "\\\\").replace("\"", "\\\"");
-    }
-
-    private String isoDateTime(String storeDateTime) {
-        if (storeDateTime == null || storeDateTime.isBlank()) {
-            return "1970-01-01T00:00:00Z";
-        }
-        LocalDateTime local = LocalDateTime.parse(storeDateTime, STORE);
-        return local.atOffset(java.time.ZoneOffset.UTC).toInstant().toString();
-    }
-
-    private String str(Object v) {
-        return v == null ? "" : String.valueOf(v);
-    }
 }
