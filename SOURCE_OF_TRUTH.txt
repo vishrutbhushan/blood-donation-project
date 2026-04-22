@@ -46,12 +46,12 @@ FR-07 Donor Search (Authenticated)
 FR-08 Request Lifecycle
 1. User can create request from donor search context.
 2. User can view request history and response history.
-3. User can trigger re-request preview, re-request, and dispatch-next for eligible requests.
+3. User can trigger re-request preview and re-request for eligible requests.
 4. Active request guard is enforced per user.
 
 FR-09 Donor Response Update
-1. Dummy endpoint exists to mark donor response by phone number input.
-2. Response is linked to request context and visible in user response history.
+1. Donor response status is updated through WhatsApp webhook processing.
+2. Accepted responses are linked to request context and visible in user response history.
 
 FR-10 Logging
 1. API entry and exit logs are controller-level and minimal.
@@ -98,22 +98,16 @@ Backend direct routes (service on `:8080`):
 2. `POST /auth/send-otp`
 3. `POST /auth/verify-otp`
 4. `POST /users/get-or-create`
-5. `GET /blood-banks/nearest-20`
-6. `GET /blood-banks/search`
-7. `GET /api/blood-banks/nearest-20`
-8. `GET /api/blood-banks/search`
-9. `GET /donors/search`
-10. `POST /searches/{userId}`
-11. `POST /requests/{searchId}`
-12. `GET /requests/{requestId}/re-request-preview`
-13. `POST /requests/{requestId}/re-request`
-14. `POST /requests/{requestId}/dispatch-next`
-15. `GET /requests/user/{userId}`
-16. `GET /requests/user/{userId}/responses`
-17. `GET /requests/user/{userId}/active`
-18. `POST /responses/{requestId}`
-19. `GET /responses/{requestId}`
-20. `POST /responses/mark-responded`
+5. `GET /blood-banks/search`
+6. `GET /api/blood-banks/search`
+7. `GET /donors/search`
+8. `POST /searches/{userId}`
+9. `POST /requests/{searchId}`
+10. `GET /requests/{requestId}/re-request-preview`
+11. `POST /requests/{requestId}/re-request`
+12. `GET /requests/user/{userId}`
+13. `GET /requests/user/{userId}/responses`
+14. `GET /requests/user/{userId}/active`
 
 Frontend proxy routes (service on `:3001`):
 1. `/api/backend/*` -> backend `/*`

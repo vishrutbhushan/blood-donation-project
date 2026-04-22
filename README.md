@@ -78,7 +78,6 @@ Frontend-facing API routes (through Nginx proxy):
 - `/api/backend/requests/{searchId}`
 - `/api/backend/requests/{requestId}/re-request`
 - `/api/backend/requests/{requestId}/re-request-preview`
-- `/api/backend/requests/{requestId}/dispatch-next`
 - `/api/backend/requests/user/{userId}`
 - `/api/backend/requests/user/{userId}/responses`
 - `/api/backend/requests/user/{userId}/active`
@@ -92,7 +91,6 @@ Direct backend controller base routes:
 - `/donors/*`
 - `/searches/*`
 - `/requests/*`
-- `/responses/*`
 
 Donor WhatsApp webhook:
 

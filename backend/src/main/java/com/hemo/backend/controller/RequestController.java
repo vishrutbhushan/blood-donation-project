@@ -1,7 +1,6 @@
 package com.hemo.backend.controller;
 
 import com.hemo.backend.dto.ActiveRequestStatusDTO;
-import com.hemo.backend.dto.DispatchResultDTO;
 import com.hemo.backend.dto.DonorSearchSummaryDTO;
 import com.hemo.backend.dto.RequestDTO;
 import com.hemo.backend.dto.RequestSummaryDTO;
@@ -44,14 +43,6 @@ public class RequestController {
         DonorSearchSummaryDTO preview = requestService.previewReRequest(requestId);
         log.info("api.exit requests.re-request-preview matched={}", preview.getTotalMatched());
         return preview;
-    }
-
-    @PostMapping("/{requestId}/dispatch-next")
-    public DispatchResultDTO dispatchNext(@PathVariable Long requestId) {
-        log.info("api.enter requests.dispatch-next requestId={}", requestId);
-        DispatchResultDTO response = requestService.dispatchNextTwenty(requestId);
-        log.info("api.exit requests.dispatch-next notifiedFrom={} notifiedTo={}", response.getNotifiedFrom(), response.getNotifiedTo());
-        return response;
     }
 
     @GetMapping("/user/{userId}")

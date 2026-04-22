@@ -24,16 +24,6 @@ public class BloodBankController {
         this.pincodeGeoService = pincodeGeoService;
     }
 
-    @GetMapping("/nearest-20")
-    public List<BloodBankDTO> getNearestBloodBanks(
-            @RequestParam Double latitude,
-            @RequestParam Double longitude) {
-        log.info("api.enter blood-banks.nearest-20 latitude={} longitude={}", latitude, longitude);
-        List<BloodBankDTO> banks = bloodBankService.findNearestBloodBanks(latitude, longitude);
-        log.info("api.exit blood-banks.nearest-20 count={}", banks.size());
-        return banks;
-    }
-
     @GetMapping("/search")
     public List<BloodBankDTO> searchByPincode(
             @RequestParam String pincode,
