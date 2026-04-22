@@ -19,6 +19,5 @@ public class ResponseRecordDTO {
     private String phoneNumber;
     private String bloodGroup;
     private String location;
-    private String responseStatus;
     private LocalDateTime respondedAt;
 }

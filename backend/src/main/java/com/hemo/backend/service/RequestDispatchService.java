@@ -16,15 +16,23 @@ import org.springframework.stereotype.Service;
 @Service
 @RequiredArgsConstructor
 public class RequestDispatchService {
-    private static final String DEMO_DONOR_ID = "DEMO:9889206245";
-    private static final String DEMO_DONOR_PHONE = "9889206245";
-    private static final String FIXED_TEST_PHONE = "9889206245";
+    private static final int INITIAL_BATCH_SIZE = 20;
 
     private final ResponseRepository responseRepository;
     private final DonorSearchService donorSearchService;
 
+    @Value("${app.demo-donor-phone}")
+    private String demoDonorPhone;
+
+    @Value("${app.demo-donor-name}")
+    private String demoDonorName;
+
     @Value("${twilio.whatsapp-number}")
     private String twilioWhatsappNumber;
+
+    private String demoDonorId() {
+        return "DEMO:" + demoDonorPhone;
+    }
 
     public int dispatchBatchForRequest(Request request, int batchSize) {
         if (batchSize <= 0) {
@@ -32,11 +40,12 @@ public class RequestDispatchService {
         }
 
         List<String> excludedDonorIds = responseRepository.findContactedDonorIdsBySearchId(request.getSearch().getSearchId());
+        String demoId = demoDonorId();
         DonorSearchResponseDTO donorBatch = donorSearchService.searchCompatibleDonors(
                 request.getBloodGroup(),
                 request.getSearch().getHospitalPincode(),
                 0,
-                200,
+                INITIAL_BATCH_SIZE,
                 excludedDonorIds
         );
 
@@ -44,13 +53,13 @@ public class RequestDispatchService {
             ? new ArrayList<>()
             : new ArrayList<>(donorBatch.getDonors());
 
-        boolean demoAlreadyContacted = excludedDonorIds.contains(DEMO_DONOR_ID);
+        boolean demoAlreadyContacted = excludedDonorIds.contains(demoId);
         if (!demoAlreadyContacted) {
             dispatchDonors.add(0, DonorCandidateDTO.builder()
-                .donorId(DEMO_DONOR_ID)
-                .name("Demo Donor")
+            .donorId(demoId)
+            .name(demoDonorName)
                 .bloodGroup(request.getBloodGroup())
-                .phone(DEMO_DONOR_PHONE)
+            .phone(demoDonorPhone)
                 .pincode(request.getSearch().getHospitalPincode())
                 .location("Demo")
                 .source("DEMO")
@@ -67,6 +76,7 @@ public class RequestDispatchService {
             Response contact_number = new Response();
             contact_number.setRequest(request);
             contact_number.setDonorId(donor.getDonorId());
+            contact_number.setAbhaId(donor.getAbhaId());
             contact_number.setDonorName(donor.getName());
             contact_number.setPhoneNumber(donor.getPhone());
             contact_number.setBloodGroup(donor.getBloodGroup());
@@ -74,10 +84,10 @@ public class RequestDispatchService {
             responseRepository.save(contact_number);
 
             // Only the demo donor gets one real WhatsApp message; the rest stay as logs.
-            if (DEMO_DONOR_ID.equals(donor.getDonorId())) {
+            if (demoId.equals(donor.getDonorId())) {
                 try {
                     sendWhatsAppToDonor(
-                        FIXED_TEST_PHONE,
+                        demoDonorPhone,
                         request.getBloodGroup(),
                         request.getSearch().getHospitalName(),
                         request.getSearch().getHospitalPincode()

@@ -20,7 +20,7 @@ import org.springframework.web.client.RestClient;
 
 @Service
 public class DonorSearchService {
-    private static final long SYNTHETIC_DEMO_DONOR_COUNT = 1L;
+    private static final int MAX_LIMIT = 20;
 
     private static final String QUERY_WITH_GEO_TEMPLATE = """
             {
@@ -97,7 +97,7 @@ public class DonorSearchService {
             int limit,
             List<String> excludedDonorIds) {
         int safeOffset = Math.max(0, offset);
-        int safeLimit = Math.max(1, Math.min(limit, 200));
+        int safeLimit = Math.max(1, Math.min(limit, MAX_LIMIT));
         String normalizedRecipient = bloodCompatibilityService.normalize(recipientBloodGroup);
         List<String> compatibleGroups = bloodCompatibilityService.compatibleDonorGroups(normalizedRecipient);
         PincodeGeoService.GeoPoint geoPoint = pincodeGeoService.resolve(pincode).orElse(null);
@@ -146,6 +146,7 @@ public class DonorSearchService {
 
                     donors.add(DonorCandidateDTO.builder()
                         .donorId(donorId)
+                        .abhaId(src.path("abha_hash").asText(src.path("abha_id").asText("")))
                         .name(src.path("name").asText("Unknown"))
                         .bloodGroup(src.path("blood_group").asText(""))
                         .phone(src.path("contact_number").asText(""))
@@ -211,13 +212,12 @@ public class DonorSearchService {
         long baseBelow10 = response.getBelow10KmCount() == null ? 0L : response.getBelow10KmCount();
         long baseBelow50 = response.getBelow50KmCount() == null ? 0L : response.getBelow50KmCount();
         long baseAbove50 = response.getAbove50KmCount() == null ? 0L : response.getAbove50KmCount();
-        long syntheticCount = SYNTHETIC_DEMO_DONOR_COUNT;
 
         return DonorSearchSummaryDTO.builder()
             .recipientBloodGroup(response.getRecipientBloodGroup())
             .compatibleDonorGroups(response.getCompatibleDonorGroups())
-            .totalMatched(baseTotal + syntheticCount)
-            .below10KmCount(baseBelow10 + syntheticCount)
+            .totalMatched(baseTotal)
+            .below10KmCount(baseBelow10)
             .below50KmCount(baseBelow50)
             .above50KmCount(baseAbove50)
             .offset(response.getOffset())

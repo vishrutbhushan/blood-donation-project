@@ -11,6 +11,7 @@ import com.hemo.backend.exception.GlobalExceptionHandler.AppException;
 import com.hemo.backend.repository.RequestRepository;
 import com.hemo.backend.repository.ResponseRepository;
 import com.hemo.backend.repository.SearchRepository;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -34,11 +35,11 @@ public class RequestService {
                 .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, "Search not found"));
 
         Long userId = search.getUser().getUserId();
-        if (hasActiveRequestForUser(userId)) {
-            throw new AppException(HttpStatus.CONFLICT, "Active request exists");
+        if (hasRootRequestTodayForUser(userId)) {
+            throw new AppException(HttpStatus.CONFLICT, "Only one request is allowed per day");
         }
 
-        int initialBatch = Math.min(20, Math.max(dto.getMatchedCount(), 0));
+        int initialBatch = 20;
 
         Request request = buildRequest(search, dto.getBloodGroup(), dto.getComponent(), dto.getUnitsRequested(), null);
         request.setNumberOfDonorsContacted(initialBatch);
@@ -48,7 +49,7 @@ public class RequestService {
         saved.setNumberOfDonorsContacted(sent);
         saved.setLastNotifiedAt(LocalDateTime.now());
         saved = requestRepository.save(saved);
-        return toRequestSummary(saved, canReRequest(saved));
+        return toRequestSummary(saved, reRequestState(saved));
     }
 
     @Transactional
@@ -56,9 +57,17 @@ public class RequestService {
         Request oldRequest = requestRepository.findByIdWithSearchAndUser(requestId)
                 .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, "Request not found"));
 
-        long responseCount = responseRepository.countSince(requestId, LocalDateTime.now().minusHours(1));
-        if (responseCount > 0) {
-            throw new AppException(HttpStatus.CONFLICT, "Responses already received");
+        if (oldRequest.getParentRequest() != null) {
+            throw new AppException(HttpStatus.CONFLICT, "Only one re-request is allowed for a request chain");
+        }
+
+        if (requestRepository.existsByParentRequest_RequestId(oldRequest.getRequestId())) {
+            throw new AppException(HttpStatus.CONFLICT, "Only one re-request is allowed for a request chain");
+        }
+
+        LocalDateTime reRequestAvailableAt = oldRequest.getCreatedAt().plusHours(1);
+        if (reRequestAvailableAt.isAfter(LocalDateTime.now())) {
+            throw new AppException(HttpStatus.CONFLICT, "Please wait for 1 hour before re-requesting");
         }
 
         Request next = buildRequest(
@@ -75,38 +84,20 @@ public class RequestService {
         saved.setNumberOfDonorsContacted(sent);
         saved.setLastNotifiedAt(LocalDateTime.now());
         saved = requestRepository.save(saved);
-        return toRequestSummary(saved, canReRequest(saved));
+        return toRequestSummary(saved, reRequestState(saved));
     }
 
     @Transactional
     public DispatchResultDTO dispatchNextTwenty(@NonNull Long requestId) {
-        Request request = requestRepository.findByIdWithSearchAndUser(requestId)
-                .orElseThrow(() -> new AppException(HttpStatus.NOT_FOUND, "Request not found"));
-
-        if (request.getExpiresAt() != null && !request.getExpiresAt().isAfter(LocalDateTime.now())) {
-            request.setStatus("EXPIRED");
-            requestRepository.save(request);
-            throw new AppException(HttpStatus.CONFLICT, "Request expired");
-        }
-
-        int current = request.getNumberOfDonorsContacted() == null ? 0 : request.getNumberOfDonorsContacted();
-        int start = current + 1;
-        int sent = requestDispatchService.dispatchBatchForRequest(request, 20);
-        int end = current + sent;
-
-        request.setNumberOfDonorsContacted(end);
-        request.setLastNotifiedAt(LocalDateTime.now());
-        requestRepository.save(request);
-
-        return new DispatchResultDTO(requestId, start, end);
+        throw new AppException(HttpStatus.CONFLICT, "Only re-request action is allowed");
     }
 
     @Transactional(readOnly = true)
     public List<RequestSummaryDTO> getUserRequestHistory(@NonNull Long userId) {
-        return requestRepository.findByUserId(userId)
-                .stream()
-                .map(req -> toRequestSummary(req, canReRequest(req)))
-                .toList();
+        List<Request> history = requestRepository.findByUserId(userId);
+        return history.stream()
+            .map(req -> toRequestSummary(req, reRequestState(req)))
+            .toList();
     }
 
     @Transactional(readOnly = true)
@@ -125,7 +116,7 @@ public class RequestService {
             request.getBloodGroup(),
             request.getSearch().getHospitalPincode(),
             0,
-            200,
+            20,
             responseRepository.findContactedDonorIdsBySearchId(request.getSearch().getSearchId())
         );
         return donorSearchService.toSummaryDTO(donorBatch);
@@ -136,14 +127,28 @@ public class RequestService {
         return requestRepository.countActiveByUser(userId) > 0;
     }
 
-    private boolean canReRequest(Request request) {
-        if (request.getExpiresAt() == null || request.getExpiresAt().isAfter(LocalDateTime.now())) {
-            return false;
-        }
-        return responseRepository.countByRequestId(request.getRequestId()) == 0;
+    @Transactional(readOnly = true)
+    public boolean hasRootRequestTodayForUser(@NonNull Long userId) {
+        return requestRepository.countRootRequestsSince(userId, LocalDate.now().atStartOfDay()) > 0;
     }
 
-    private RequestSummaryDTO toRequestSummary(Request request, boolean canReRequest) {
+    private ReRequestState reRequestState(Request request) {
+        if (request.getParentRequest() != null) {
+            return new ReRequestState(false, "Only one re-request is allowed for a request chain");
+        }
+
+        if (requestRepository.existsByParentRequest_RequestId(request.getRequestId())) {
+            return new ReRequestState(false, "Only one re-request is allowed for a request chain");
+        }
+
+        if (request.getCreatedAt() == null || request.getCreatedAt().plusHours(1).isAfter(LocalDateTime.now())) {
+            return new ReRequestState(false, "Please wait for 1 hour before re-requesting this request.");
+        }
+
+        return new ReRequestState(true, null);
+    }
+
+    private RequestSummaryDTO toRequestSummary(Request request, ReRequestState reRequestState) {
         return RequestSummaryDTO.builder()
                 .requestId(request.getRequestId())
                 .searchId(request.getSearch().getSearchId())
@@ -156,9 +161,12 @@ public class RequestService {
                 .createdAt(request.getCreatedAt())
                 .expiresAt(request.getExpiresAt())
                 .lastNotifiedAt(request.getLastNotifiedAt())
-                .canReRequest(canReRequest)
+                .canReRequest(reRequestState.canReRequest())
+                .reRequestBlockedReason(reRequestState.reason())
                 .build();
     }
+
+    private record ReRequestState(boolean canReRequest, String reason) {}
 
     
 

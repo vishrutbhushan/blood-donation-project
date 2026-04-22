@@ -1,24 +1,26 @@
 import { createSlice } from '@reduxjs/toolkit';
 
+export const initialDonorState = {
+  abhaId: '',
+  phone: '',
+  name: '',
+  otpSent: false,
+  otpValue: '',
+  otpVerified: false,
+  form: { bloodGroup: '', pincode: '', hospitalName: '' },
+  matchedCount: 0,
+  distanceBuckets: {
+    below10Km: 0,
+    below50Km: 0,
+    above50Km: 0,
+  },
+  confirmOpen: false,
+  searched: false,
+};
+
 const donorSlice = createSlice({
   name: 'donor',
-  initialState: {
-    abhaId: '',
-    phone: '',
-    name: '',
-    otpSent: false,
-    otpValue: '',
-    otpVerified: false,
-    form: { bloodGroup: '', pincode: '', hospitalName: '' },
-    matchedCount: 0,
-    distanceBuckets: {
-      below10Km: 0,
-      below50Km: 0,
-      above50Km: 0,
-    },
-    confirmOpen: false,
-    searched: false,
-  },
+  initialState: initialDonorState,
   reducers: {
     setAbhaId(state, action) {
       state.abhaId = action.payload;

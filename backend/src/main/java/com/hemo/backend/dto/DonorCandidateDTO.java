@@ -7,6 +7,7 @@ import lombok.Value;
 @Builder
 public class DonorCandidateDTO {
     String donorId;
+    String abhaId;
     String name;
     String bloodGroup;
     String phone;

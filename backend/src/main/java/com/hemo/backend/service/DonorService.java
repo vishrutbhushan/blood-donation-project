@@ -17,10 +17,11 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class DonorService {
 
-    private static final String FIXED_REQUESTOR_PHONE = "9325834381";
-
     private final ResponseRepository responseRepository;
     private final RequestRepository requestRepository;
+
+    @Value("${app.fixed-requestor-phone}")
+    private String fixedRequestorPhone;
 
     @Value("${twilio.whatsapp-number}")
     private String twilioWhatsappNumber;
@@ -55,7 +56,7 @@ public class DonorService {
             // Send donor contact to requestor via WhatsApp
             try {
                 Message.creator(
-                    new PhoneNumber("whatsapp:+91" + FIXED_REQUESTOR_PHONE),
+                    new PhoneNumber("whatsapp:+91" + fixedRequestorPhone),
                     new PhoneNumber("whatsapp:" + twilioWhatsappNumber),
                     "HEMO-CONNECT: A donor has agreed to help!\n" +
                     "Request ID: " + request.getRequestId() + "\n" +
@@ -67,7 +68,7 @@ public class DonorService {
                 System.out.println("Requestor notified for request: " + request.getRequestId());
 
             } catch (Exception e) {
-                System.err.println("Failed to notify requestor: " + e.getMessage());
+                System.err.println("Failed to notify requestor " + fixedRequestorPhone + ": " + e.getMessage());
             }
 
             System.out.println("Donor " + donorPhone + " said YES for request "

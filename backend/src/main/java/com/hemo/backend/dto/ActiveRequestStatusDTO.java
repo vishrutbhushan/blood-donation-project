@@ -7,4 +7,5 @@ import lombok.Data;
 @AllArgsConstructor
 public class ActiveRequestStatusDTO {
     private boolean active;
+    private boolean createdToday;
 }

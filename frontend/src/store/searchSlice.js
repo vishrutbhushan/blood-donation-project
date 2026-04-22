@@ -1,24 +1,26 @@
 import { createSlice } from '@reduxjs/toolkit';
 
-const initialForm = {
+export const initialSearchForm = {
   bloodGroup: '',
   bloodComponent: '',
   hospitalPincode: '',
   unitsRequested: 1,
 };
 
+export const initialSearchState = {
+  form: initialSearchForm,
+  banks: [],
+  userId: null,
+  searchId: null,
+  lastRequestId: null,
+  activeRequest: false,
+  requests: [],
+  responses: [],
+};
+
 const searchSlice = createSlice({
   name: 'search',
-  initialState: {
-    form: initialForm,
-    banks: [],
-    userId: null,
-    searchId: null,
-    lastRequestId: null,
-    activeRequest: false,
-    requests: [],
-    responses: [],
-  },
+  initialState: initialSearchState,
   reducers: {
     setSearchField(state, action) {
       const { key, value } = action.payload;
@@ -45,6 +47,9 @@ const searchSlice = createSlice({
     setResponses(state, action) {
       state.responses = action.payload;
     },
+    resetSearchState() {
+      return initialSearchState;
+    },
   },
 });
 
@@ -57,5 +62,6 @@ export const {
   setActiveRequest,
   setRequests,
   setResponses,
+  resetSearchState,
 } = searchSlice.actions;
 export default searchSlice.reducer;

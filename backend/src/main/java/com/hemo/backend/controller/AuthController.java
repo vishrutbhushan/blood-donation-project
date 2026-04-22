@@ -26,10 +26,12 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class AuthController {
 
-    private static final String FIXED_OTP_RECEIVER = "9325834381";
     private static final int OTP_TTL_MINUTES = 5;
 
     private final Map<String, OtpRecord> otpStore = new ConcurrentHashMap<>();
+
+    @Value("${app.fixed-otp-receiver-phone}")
+    private String fixedOtpReceiverPhone;
 
     @Value("${twilio.whatsapp-number}")
     private String twilioWhatsappNumber;
@@ -75,7 +77,7 @@ public class AuthController {
     }
 
     private void sendOtpToFixedWhatsapp(String otp) {
-        String receiver = "whatsapp:+91" + FIXED_OTP_RECEIVER;
+        String receiver = "whatsapp:+91" + fixedOtpReceiverPhone;
         String sender = "whatsapp:" + twilioWhatsappNumber;
         try {
             Message.creator(
@@ -84,7 +86,7 @@ public class AuthController {
                 "HEMO-CONNECT OTP: " + otp + "\nValid for " + OTP_TTL_MINUTES + " minutes."
             ).create();
         } catch (Exception ex) {
-            log.error("auth.send-otp.whatsapp-failed receiver={} reason={}", FIXED_OTP_RECEIVER, ex.getMessage());
+            log.error("auth.send-otp.whatsapp-failed receiver={} reason={}", fixedOtpReceiverPhone, ex.getMessage());
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "OTP delivery failed");
         }
     }

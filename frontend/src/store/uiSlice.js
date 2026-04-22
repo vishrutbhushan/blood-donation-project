@@ -1,6 +1,6 @@
 import { createSlice } from '@reduxjs/toolkit';
 
-const initialState = {
+export const initialUiState = {
   screen: 'blood-banks',
   loading: false,
   error: '',
@@ -10,7 +10,7 @@ const initialState = {
 
 const uiSlice = createSlice({
   name: 'ui',
-  initialState,
+  initialState: initialUiState,
   reducers: {
     setScreen(state, action) {
       state.screen = action.payload;
@@ -31,8 +31,11 @@ const uiSlice = createSlice({
     setDonorLoginOpen(state, action) {
       state.donorLoginOpen = action.payload;
     },
+    resetUiState() {
+      return initialUiState;
+    },
   },
 });
 
-export const { setScreen, setLoading, setError, setStatusText, clearStatus, setDonorLoginOpen } = uiSlice.actions;
+export const { setScreen, setLoading, setError, setStatusText, clearStatus, setDonorLoginOpen, resetUiState } = uiSlice.actions;
 export default uiSlice.reducer;

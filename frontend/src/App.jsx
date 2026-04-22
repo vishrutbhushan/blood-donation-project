@@ -53,7 +53,10 @@ import {
   setOtpValue,
   setOtpVerified,
   setProfile,
+  resetDonorOtp,
 } from './store/donorSlice';
+import { resetSearchState } from './store/searchSlice';
+import { resetUiState } from './store/uiSlice';
 
 function tabIndex(screen) {
   if (screen === 'donors') {
@@ -65,6 +68,21 @@ function tabIndex(screen) {
 export default function App() {
   const dispatch = useDispatch();
   const [referenceData, setReferenceData] = useState({ bloodGroups: [], bloodComponents: [] });
+  const formatDateTime = (value) => {
+    if (!value) {
+      return { date: '-', time: '-' };
+    }
+
+    const dateValue = new Date(value);
+    if (Number.isNaN(dateValue.getTime())) {
+      return { date: '-', time: '-' };
+    }
+
+    return {
+      date: new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).format(dateValue),
+      time: new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true }).format(dateValue),
+    };
+  };
 
   const { screen, loading, error, statusText, donorLoginOpen } = useSelector((state) => state.ui);
   const {
@@ -135,6 +153,50 @@ export default function App() {
       cancelled = true;
     };
   }, [dispatch]);
+
+  useEffect(() => {
+    if (!userId || !otpVerified) {
+      return undefined;
+    }
+
+    let cancelled = false;
+
+    const syncUserState = async () => {
+      if (cancelled) {
+        return;
+      }
+      await refreshUserState(userId);
+    };
+
+    syncUserState();
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        syncUserState();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      cancelled = true;
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [userId, otpVerified]);
+
+  useEffect(() => {
+    if (!userId || !otpVerified) {
+      return undefined;
+    }
+
+    const timer = window.setInterval(() => {
+      refreshUserState(userId).catch(() => {});
+    }, 5000);
+
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, [userId, otpVerified]);
 
   const canSearch = useMemo(() => {
     return (
@@ -264,7 +326,7 @@ export default function App() {
       bloodGroup: group || '',
       pincode: pincode || '',
       offset: '0',
-      limit: '200',
+      limit: '20',
     }).toString();
 
     const result = await apiRequest(`/api/backend/donors/search?${query}`);
@@ -303,8 +365,10 @@ export default function App() {
       dispatch(setError('Login required'));
       return;
     }
-    if (activeRequest) {
-      dispatch(setError('Active request exists'));
+    const currentRequestState = await apiRequest(`/api/backend/requests/user/${userId}/active`).catch(() => ({ active: false, createdToday: false }));
+    if (currentRequestState?.active || currentRequestState?.createdToday) {
+      window.alert('Only 1 unique request is allowed in a day.');
+      dispatch(setError('Only 1 unique request is allowed in a day'));
       return;
     }
     if (!donorForm.hospitalName.trim() || !/^\d{6}$/.test(donorForm.pincode.trim())) {
@@ -398,6 +462,16 @@ export default function App() {
     }
   }
 
+  async function handleReRequestClick(requestId, canReRequest) {
+    if (!canReRequest) {
+      const row = requests.find((request) => request.requestId === requestId);
+      window.alert(row?.reRequestBlockedReason || 'Please wait for 1 hour before re-requesting this request.');
+      return;
+    }
+
+    await onReRequest(requestId);
+  }
+
   async function confirmReRequest() {
     if (!reRequestPreview.requestId) {
       return;
@@ -411,20 +485,6 @@ export default function App() {
       await refreshUserState();
     } catch {
       dispatch(setError('Re-request failed'));
-    } finally {
-      dispatch(setLoading(false));
-    }
-  }
-
-  async function onDispatchNext(requestId) {
-    dispatch(setLoading(true));
-    dispatch(clearStatus());
-    try {
-      await apiRequest(`/api/backend/requests/${requestId}/dispatch-next`, { method: 'POST' });
-      dispatch(setStatusText('Next 20 notified'));
-      await refreshUserState();
-    } catch {
-      dispatch(setError('Dispatch failed'));
     } finally {
       dispatch(setLoading(false));
     }
@@ -444,6 +504,15 @@ export default function App() {
     dispatch(setScreen('donors'));
   }
 
+  function handleLogout() {
+    dispatch(resetUiState());
+    dispatch(resetSearchState());
+    dispatch(resetDonorOtp());
+    if (typeof window !== 'undefined') {
+      window.localStorage.removeItem('hemo-connect.session.v1');
+    }
+  }
+
   return (
     <Box className="app-bg">
       <AppBar position="static" elevation={0} className="app-header">
@@ -452,10 +521,15 @@ export default function App() {
             <WaterDropOutlinedIcon className="drop-icon" />
             <Typography variant="h6" className="brand-title">Hemo Connect</Typography>
           </Box>
-          <Tabs value={tabIndex(screen)} onChange={handleScreenTabChange} className="main-tabs" textColor="inherit" indicatorColor="secondary">
-            <Tab label="Search for Blood Banks" />
-            <Tab label="Search for Donors" />
-          </Tabs>
+          <Box className="header-actions">
+            <Tabs value={tabIndex(screen)} onChange={handleScreenTabChange} className="main-tabs" textColor="inherit" indicatorColor="secondary">
+              <Tab label="Search for Blood Banks" />
+              <Tab label="Search for Donors" />
+            </Tabs>
+            <Button variant="outlined" className="logout-btn" onClick={handleLogout}>
+              Logout
+            </Button>
+          </Box>
         </Toolbar>
       </AppBar>
 
@@ -554,7 +628,7 @@ export default function App() {
                 <TextField label="Pincode" value={donorForm.pincode} onChange={(e) => updateDonorSearchForm('pincode', e.target.value)} />
               </Box>
               <Box className="action-row">
-                <Button className="primary-btn" variant="contained" onClick={searchDonors} disabled={loading || !otpVerified || activeRequest}>Search Donors</Button>
+                <Button className="primary-btn" variant="contained" onClick={searchDonors} disabled={loading || !otpVerified}>Search Donors</Button>
               </Box>
 
               {searched && (
@@ -595,9 +669,9 @@ export default function App() {
                         <TableRow>
                           <TableCell>Request ID</TableCell>
                           <TableCell>Blood Group</TableCell>
-                          <TableCell>Component</TableCell>
                           <TableCell>Status</TableCell>
-                          <TableCell>Expiry</TableCell>
+                          <TableCell>Created Date</TableCell>
+                          <TableCell>Created Time</TableCell>
                           <TableCell>Contacted</TableCell>
                           <TableCell>Action</TableCell>
                         </TableRow>
@@ -607,15 +681,18 @@ export default function App() {
                           <TableRow key={row.requestId}>
                             <TableCell>{row.requestId}</TableCell>
                             <TableCell>{row.bloodGroup}</TableCell>
-                            <TableCell>{row.component}</TableCell>
                             <TableCell>{row.status}</TableCell>
-                            <TableCell>{String(row.expiresAt || '-')}</TableCell>
+                            <TableCell>{formatDateTime(row.createdAt).date}</TableCell>
+                            <TableCell>{formatDateTime(row.createdAt).time}</TableCell>
                             <TableCell>{row.numberOfDonorsContacted}</TableCell>
                             <TableCell>
-                              <Box className="inline-actions">
-                                <Button size="small" onClick={() => onReRequest(row.requestId)} disabled={!row.canReRequest}>Re-request</Button>
-                                <Button size="small" onClick={() => onDispatchNext(row.requestId)}>Next 20</Button>
-                              </Box>
+                              <Button
+                                variant="outlined"
+                                size="small"
+                                onClick={() => handleReRequestClick(row.requestId, row.canReRequest)}
+                              >
+                                Re-request
+                              </Button>
                             </TableCell>
                           </TableRow>
                         ))}
@@ -640,7 +717,7 @@ export default function App() {
                           <TableCell>Name</TableCell>
                           <TableCell>ABHA</TableCell>
                           <TableCell>Phone</TableCell>
-                          <TableCell>Status</TableCell>
+                          <TableCell>Responded At</TableCell>
                         </TableRow>
                       </TableHead>
                       <TableBody>
@@ -650,7 +727,7 @@ export default function App() {
                             <TableCell>{row.donorName}</TableCell>
                             <TableCell>{row.abhaId || '-'}</TableCell>
                             <TableCell>{row.phoneNumber}</TableCell>
-                            <TableCell>{row.responseStatus}</TableCell>
+                            <TableCell>{`${formatDateTime(row.respondedAt).date} ${formatDateTime(row.respondedAt).time}`}</TableCell>
                           </TableRow>
                         ))}
                       </TableBody>
@@ -669,7 +746,8 @@ export default function App() {
         loading={loading}
         abhaId={abhaId}
         otpValue={otpValue}
-        canVerify={otpSent}
+        otpSent={otpSent}
+        canVerify={otpSent && /^\d{6}$/.test(otpValue.trim())}
         onAbhaChange={(value) => {
           dispatch(setAbhaId(value));
           dispatch(setOtpSent(false));

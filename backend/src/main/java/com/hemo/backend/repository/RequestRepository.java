@@ -1,6 +1,7 @@
 package com.hemo.backend.repository;
 
 import com.hemo.backend.entity.Request;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -8,6 +9,8 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface RequestRepository extends JpaRepository<Request, Long> {
+
+        boolean existsByParentRequest_RequestId(Long parentRequestId);
 
     @Query("""
             SELECT COUNT(r)
@@ -18,6 +21,16 @@ public interface RequestRepository extends JpaRepository<Request, Long> {
               AND r.expiresAt > CURRENT_TIMESTAMP
             """)
     long countActiveByUser(@Param("userId") Long userId);
+
+    @Query("""
+            SELECT COUNT(r)
+            FROM Request r
+            JOIN r.search s
+            WHERE s.user.userId = :userId
+              AND r.parentRequest IS NULL
+              AND r.createdAt >= :since
+            """)
+    long countRootRequestsSince(@Param("userId") Long userId, @Param("since") LocalDateTime since);
 
     @Query("""
             SELECT r

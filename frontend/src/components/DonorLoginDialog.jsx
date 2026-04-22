@@ -6,6 +6,7 @@ export default function DonorLoginDialog({
   loading,
   abhaId,
   otpValue,
+  otpSent,
   canVerify,
   onAbhaChange,
   onOtpChange,
@@ -35,7 +36,7 @@ export default function DonorLoginDialog({
             margin="dense"
           />
           <Box className="action-row">
-            <Button variant="outlined" onClick={onSendOtp} disabled={loading || !isAbhaValid}>Send OTP</Button>
+            <Button variant="outlined" onClick={onSendOtp} disabled={loading || !isAbhaValid || otpSent}>Send OTP</Button>
             <Button variant="contained" className="primary-btn" onClick={onVerify} disabled={loading || !canVerify}>Verify</Button>
           </Box>
         </Box>

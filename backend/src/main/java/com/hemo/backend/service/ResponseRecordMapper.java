@@ -16,7 +16,6 @@ public final class ResponseRecordMapper {
                 .phoneNumber(response.getPhoneNumber())
                 .bloodGroup(response.getBloodGroup())
                 .location(response.getLocation())
-                .responseStatus(response.getResponseStatus())
                 .respondedAt(response.getRespondedAt())
                 .build();
     }

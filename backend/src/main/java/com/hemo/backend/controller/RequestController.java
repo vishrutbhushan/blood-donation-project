@@ -74,7 +74,8 @@ public class RequestController {
     public ActiveRequestStatusDTO hasActive(@PathVariable Long userId) {
         log.info("api.enter requests.user-active userId={}", userId);
         boolean active = requestService.hasActiveRequestForUser(userId);
-        ActiveRequestStatusDTO response = new ActiveRequestStatusDTO(active);
+        boolean createdToday = requestService.hasRootRequestTodayForUser(userId);
+        ActiveRequestStatusDTO response = new ActiveRequestStatusDTO(active, createdToday);
         log.info("api.exit requests.user-active active={}", response.isActive());
         return response;
     }

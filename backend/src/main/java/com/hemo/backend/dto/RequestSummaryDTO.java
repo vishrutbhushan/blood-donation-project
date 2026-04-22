@@ -23,4 +23,5 @@ public class RequestSummaryDTO {
     private LocalDateTime expiresAt;
     private LocalDateTime lastNotifiedAt;
     private boolean canReRequest;
+    private String reRequestBlockedReason;
 }

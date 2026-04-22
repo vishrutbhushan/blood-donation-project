@@ -114,8 +114,12 @@ CREATE INDEX IF NOT EXISTS idx_searches_blood_component ON searches(blood_compon
 CREATE INDEX IF NOT EXISTS idx_requests_search_id ON requests(search_id);
 CREATE INDEX IF NOT EXISTS idx_requests_blood_group ON requests(blood_group);
 CREATE INDEX IF NOT EXISTS idx_requests_component ON requests(component);
+CREATE INDEX IF NOT EXISTS idx_requests_parent_request_id ON requests(parent_request_id);
+CREATE INDEX IF NOT EXISTS idx_requests_created_at ON requests(created_at);
+CREATE INDEX IF NOT EXISTS idx_requests_root_created_at ON requests(created_at) WHERE parent_request_id IS NULL;
 CREATE INDEX IF NOT EXISTS idx_requests_status_expiry ON requests(status, expires_at);
 CREATE INDEX IF NOT EXISTS idx_responses_request_id ON responses(request_id);
+CREATE INDEX IF NOT EXISTS idx_responses_abha_id ON responses(abha_id);
 CREATE INDEX IF NOT EXISTS idx_responses_phone_status ON responses(phone_number, response_status);
 CREATE INDEX IF NOT EXISTS idx_responses_status_responded_at ON responses(response_status, responded_at);
 CREATE INDEX IF NOT EXISTS idx_blood_group_lookup_order ON blood_group_lookup(sort_order, blood_group_code);
