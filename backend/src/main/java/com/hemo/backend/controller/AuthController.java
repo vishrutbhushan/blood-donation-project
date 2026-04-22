@@ -45,7 +45,7 @@ public class AuthController {
 
         sendOtpToFixedWhatsapp(otp);
 
-        AuthProfileDTO profile = profileFromAbha(dto.getAbhaId());
+        AuthProfileDTO profile = requestorProfile();
         OtpSendResponseDTO response = new OtpSendResponseDTO(true, dto.getAbhaId(), profile.getName(), profile.getPhone());
         log.info("api.exit auth.send-otp sent={}", response.isSent());
         return response;
@@ -65,7 +65,7 @@ public class AuthController {
 
         otpStore.remove(dto.getAbhaId());
 
-        AuthProfileDTO profile = profileFromAbha(dto.getAbhaId());
+        AuthProfileDTO profile = requestorProfile();
         OtpVerifyResponseDTO response = new OtpVerifyResponseDTO(true, dto.getAbhaId(), profile.getName(), profile.getPhone());
         log.info("api.exit auth.verify-otp verified={}", response.isVerified());
         return response;
@@ -90,9 +90,8 @@ public class AuthController {
         }
     }
 
-    private AuthProfileDTO profileFromAbha(String abhaId) {
-        String trimmedPhone = abhaId.substring(0, 10);
-        return new AuthProfileDTO("Demo User", trimmedPhone);
+    private AuthProfileDTO requestorProfile() {
+        return new AuthProfileDTO("Requestor", fixedOtpReceiverPhone);
     }
 
     private record OtpRecord(String otp, LocalDateTime expiresAt) {}

@@ -5,12 +5,15 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hemo.backend.dto.DonorCandidateDTO;
 import com.hemo.backend.dto.DonorSearchResponseDTO;
 import com.hemo.backend.dto.DonorSearchSummaryDTO;
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.Set;
 import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -146,7 +149,7 @@ public class DonorSearchService {
 
                     donors.add(DonorCandidateDTO.builder()
                         .donorId(donorId)
-                        .abhaId(src.path("abha_hash").asText(src.path("abha_id").asText("")))
+                        .abhaId(resolveAbhaId(src, donorId))
                         .name(src.path("name").asText("Unknown"))
                         .bloodGroup(src.path("blood_group").asText(""))
                         .phone(src.path("contact_number").asText(""))
@@ -205,6 +208,28 @@ public class DonorSearchService {
 
     private String escape(String value) {
         return value.replace("\\", "\\\\").replace("\"", "\\\"");
+    }
+
+    private String resolveAbhaId(JsonNode src, String donorId) {
+        String abhaHash = src.path("abha_hash").asText("").trim();
+        if (!abhaHash.isBlank()) {
+            return abhaHash;
+        }
+
+        String abhaId = src.path("abha_id").asText("").trim();
+        if (!abhaId.isBlank()) {
+            return abhaId;
+        }
+
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] bytes = digest.digest(donorId.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            BigInteger number = new BigInteger(1, bytes).mod(BigInteger.TEN.pow(14));
+            return String.format("%014d", number.longValue());
+        } catch (NoSuchAlgorithmException ex) {
+            long fallback = Math.floorMod(donorId.hashCode(), 100000000000000L);
+            return String.format("%014d", fallback);
+        }
     }
 
     public DonorSearchSummaryDTO toSummaryDTO(DonorSearchResponseDTO response) {

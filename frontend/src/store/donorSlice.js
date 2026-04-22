@@ -23,8 +23,6 @@ const donorSlice = createSlice({
     setAbhaId(state, action) {
       state.abhaId = action.payload;
     },
-    setProfile(state, action) {
-    },
     setOtpSent(state, action) {
       state.otpSent = action.payload;
     },
@@ -65,7 +63,6 @@ const donorSlice = createSlice({
 
 export const {
   setAbhaId,
-  setProfile,
   setOtpSent,
   setOtpValue,
   setOtpVerified,

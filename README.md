@@ -166,5 +166,5 @@ Full table/column and dataflow mapping list is maintained in `SOURCE_OF_TRUTH.tx
 3. Copy the public ngrok URL.
 4. In Twilio Sandbox, set the inbound WhatsApp webhook to `https://<ngrok-host>/api/donor/respond`.
 5. Send a donor message from WhatsApp with `YES` or `NO`.
-6. In demo mode, the WhatsApp send targets are driven by the env values `APP_DEMO_DONOR_PHONE`, `APP_FIXED_REQUESTOR_PHONE`, and `APP_FIXED_OTP_RECEIVER_PHONE`; the rest of the 20-contact batch is logged only.
+6. In demo mode, the WhatsApp send targets are driven by the env values `APP_DEMO_DONOR_PHONE_1`, `APP_DEMO_DONOR_PHONE_2`, `APP_DEMO_DONOR_PHONE_3`, `APP_FIXED_REQUESTOR_PHONE`, and `APP_FIXED_OTP_RECEIVER_PHONE`; the rest of the 20-contact batch is logged only.
 7. A pending response row is created with `response_status = NULL`; when `YES` arrives, that row becomes visible to the requestor through `/requests/user/{userId}/responses`.
