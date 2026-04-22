@@ -38,5 +38,4 @@ temp/
 *.class
 *.jar
 *.war
-target/db-seeder/generated_seed_inventory_transactions.csv
-db-seeder/generated_seed_donors.csv
+target/

@@ -31,7 +31,7 @@ import ConfirmRequestDialog from './components/ConfirmRequestDialog';
 import DonorLoginDialog from './components/DonorLoginDialog';
 import ReRequestConfirmDialog from './components/ReRequestConfirmDialog';
 import apiRequest from './lib/apiRequest';
-import { clearStatus, setDonorLoginOpen, setError, setLoading, setScreen, setStatusText } from './store/uiSlice';
+import { clearStatus, setDonorLoginOpen, setLoading, setScreen, setStatusText } from './store/uiSlice';
 import {
   setBanks,
   setRequests,
@@ -65,6 +65,11 @@ function tabIndex(screen) {
 export default function App() {
   const dispatch = useDispatch();
   const [referenceData, setReferenceData] = useState({ bloodGroups: [], bloodComponents: [] });
+  const showBrowserError = (message) => {
+    if (typeof window !== 'undefined') {
+      window.alert(message);
+    }
+  };
   const formatDateTime = (value) => {
     if (!value) {
       return { date: '-', time: '-' };
@@ -81,7 +86,7 @@ export default function App() {
     };
   };
 
-  const { screen, loading, error, statusText, donorLoginOpen } = useSelector((state) => state.ui);
+  const { screen, loading, statusText, donorLoginOpen } = useSelector((state) => state.ui);
   const {
     form,
     banks,
@@ -139,7 +144,7 @@ export default function App() {
       })
       .catch(() => {
         if (!cancelled) {
-          dispatch(setError('Reference data failed to load'));
+          showBrowserError('Reference data failed to load');
         }
       });
 
@@ -196,9 +201,17 @@ export default function App() {
     return (
       form.bloodGroup &&
       form.bloodComponent &&
-      /^\d{6}$/.test(form.hospitalPincode.trim())
+      form.hospitalPincode.trim().length > 0
     );
   }, [form]);
+
+  const canSearchDonors = useMemo(() => {
+    return (
+      donorForm.hospitalName.trim().length > 0 &&
+      donorForm.bloodGroup &&
+      donorForm.pincode.trim().length > 0
+    );
+  }, [donorForm]);
 
   function updateSearchForm(key, value) {
     dispatch(setSearchField({ key, value }));
@@ -231,7 +244,7 @@ export default function App() {
 
   async function sendDonorOtp() {
     if (!/^\d{14}$/.test(abhaId.trim())) {
-      dispatch(setError('Invalid ABHA'));
+      showBrowserError('Invalid ABHA');
       return;
     }
 
@@ -246,7 +259,7 @@ export default function App() {
       dispatch(setOtpSent(true));
       dispatch(setStatusText('OTP sent'));
     } catch {
-      dispatch(setError('OTP send failed'));
+      showBrowserError('OTP send failed');
     } finally {
       dispatch(setLoading(false));
     }
@@ -254,7 +267,7 @@ export default function App() {
 
   async function verifyDonorOtp() {
     if (!otpSent || !otpValue.trim()) {
-      dispatch(setError('Invalid OTP'));
+      showBrowserError('Invalid OTP');
       return;
     }
 
@@ -280,7 +293,7 @@ export default function App() {
       dispatch(setScreen('donors'));
     } catch {
       dispatch(setOtpVerified(false));
-      dispatch(setError('OTP verification failed'));
+      showBrowserError('OTP verification failed');
     } finally {
       dispatch(setLoading(false));
     }
@@ -330,7 +343,7 @@ export default function App() {
 
   async function searchBloodBanks() {
     if (!canSearch) {
-      dispatch(setError('Invalid input'));
+      showBrowserError('Invalid input');
       return;
     }
 
@@ -344,7 +357,7 @@ export default function App() {
       dispatch(setScreen('blood-banks'));
       dispatch(setStatusText('Search complete'));
     } catch {
-      dispatch(setError('Search failed'));
+      showBrowserError('Search failed');
     } finally {
       dispatch(setLoading(false));
     }
@@ -352,17 +365,16 @@ export default function App() {
 
   async function searchDonors() {
     if (!otpVerified) {
-      dispatch(setError('Login required'));
+      showBrowserError('Login required');
       return;
     }
     const currentRequestState = await apiRequest(`/api/backend/requests/user/${userId}/active`).catch(() => ({ active: false, createdToday: false }));
     if (currentRequestState?.active || currentRequestState?.createdToday) {
       window.alert('Only 1 unique request is allowed in a day.');
-      dispatch(setError('Only 1 unique request is allowed in a day'));
       return;
     }
-    if (!donorForm.hospitalName.trim() || !/^\d{6}$/.test(donorForm.pincode.trim())) {
-      dispatch(setError('Hospital name and valid pincode are required'));
+    if (!canSearchDonors) {
+      showBrowserError('Hospital name, blood group, and pincode are required');
       return;
     }
 
@@ -381,7 +393,7 @@ export default function App() {
       dispatch(setConfirmOpen(true));
       dispatch(setStatusText('Matches loaded'));
     } catch {
-      dispatch(setError('Search failed'));
+      showBrowserError('Search failed');
     } finally {
       dispatch(setLoading(false));
     }
@@ -389,7 +401,7 @@ export default function App() {
 
   async function confirmAndCreateRequest() {
     if (!otpVerified || !userId) {
-      dispatch(setError('Login required'));
+      showBrowserError('Login required');
       return;
     }
 
@@ -424,7 +436,7 @@ export default function App() {
       dispatch(setStatusText('Request created'));
       await refreshUserState();
     } catch {
-      dispatch(setError('Request failed'));
+      showBrowserError('Request failed');
     } finally {
       dispatch(setLoading(false));
     }
@@ -445,7 +457,7 @@ export default function App() {
       });
       dispatch(setStatusText('Re-request preview loaded'));
     } catch {
-      dispatch(setError('Re-request failed'));
+      showBrowserError('Re-request failed');
     } finally {
       dispatch(setLoading(false));
     }
@@ -473,7 +485,7 @@ export default function App() {
       dispatch(setStatusText('Re-request created'));
       await refreshUserState();
     } catch {
-      dispatch(setError('Re-request failed'));
+      showBrowserError('Re-request failed');
     } finally {
       dispatch(setLoading(false));
     }
@@ -515,16 +527,16 @@ export default function App() {
               <Tab label="Search for Blood Banks" />
               <Tab label="Search for Donors" />
             </Tabs>
-            <Button variant="outlined" className="logout-btn" onClick={handleLogout}>
-              Logout
-            </Button>
+            {otpVerified && userId ? (
+              <Button variant="outlined" className="logout-btn" onClick={handleLogout}>
+                Logout
+              </Button>
+            ) : null}
           </Box>
         </Toolbar>
       </AppBar>
 
       <Container maxWidth="lg" className="content-wrap">
-        {error ? <Paper className="error-strip">{error}</Paper> : null}
-
         {screen === 'blood-banks' && (
           <Paper className="panel" variant="outlined" elevation={0}>
             <Box className="form-grid">
@@ -542,11 +554,16 @@ export default function App() {
                   {referenceData.bloodComponents.map((component) => <MenuItem key={component} value={component}>{component}</MenuItem>)}
                 </Select>
               </FormControl>
-              <TextField label="Pincode" value={form.hospitalPincode} onChange={(e) => updateSearchForm('hospitalPincode', e.target.value)} />
+              <TextField
+                label="Pincode"
+                value={form.hospitalPincode}
+                onChange={(e) => updateSearchForm('hospitalPincode', e.target.value.replace(/\D/g, '').slice(0, 5))}
+                inputProps={{ inputMode: 'numeric', pattern: '[0-9]*', maxLength: 5 }}
+              />
             </Box>
 
             <Box className="action-row">
-              <Button className="primary-btn" variant="contained" onClick={searchBloodBanks} disabled={loading}>Search</Button>
+              <Button className="primary-btn" variant="contained" onClick={searchBloodBanks} disabled={loading || !canSearch}>Search</Button>
             </Box>
 
             <Box className="results-wrap">
@@ -614,10 +631,15 @@ export default function App() {
                     {referenceData.bloodGroups.map((group) => <MenuItem key={group} value={group}>{group}</MenuItem>)}
                   </Select>
                 </FormControl>
-                <TextField label="Pincode" value={donorForm.pincode} onChange={(e) => updateDonorSearchForm('pincode', e.target.value)} />
+                <TextField
+                  label="Pincode"
+                  value={donorForm.pincode}
+                  onChange={(e) => updateDonorSearchForm('pincode', e.target.value.replace(/\D/g, '').slice(0, 5))}
+                  inputProps={{ inputMode: 'numeric', pattern: '[0-9]*', maxLength: 5 }}
+                />
               </Box>
               <Box className="action-row">
-                <Button className="primary-btn" variant="contained" onClick={searchDonors} disabled={loading || !otpVerified}>Search Donors</Button>
+                <Button className="primary-btn" variant="contained" onClick={searchDonors} disabled={loading || !otpVerified || !canSearchDonors}>Search Donors</Button>
               </Box>
 
               {searched && (
@@ -704,7 +726,6 @@ export default function App() {
                         <TableRow>
                           <TableCell>Request ID</TableCell>
                           <TableCell>Name</TableCell>
-                          <TableCell>ABHA</TableCell>
                           <TableCell>Phone</TableCell>
                           <TableCell>Responded At</TableCell>
                         </TableRow>
@@ -714,7 +735,6 @@ export default function App() {
                           <TableRow key={row.responseId}>
                             <TableCell>{row.requestId}</TableCell>
                             <TableCell>{row.donorName}</TableCell>
-                            <TableCell>{row.abhaId || '-'}</TableCell>
                             <TableCell>{row.phoneNumber}</TableCell>
                             <TableCell>{`${formatDateTime(row.respondedAt).date} ${formatDateTime(row.respondedAt).time}`}</TableCell>
                           </TableRow>
