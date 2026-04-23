@@ -557,8 +557,8 @@ export default function App() {
               <TextField
                 label="Pincode"
                 value={form.hospitalPincode}
-                onChange={(e) => updateSearchForm('hospitalPincode', e.target.value.replace(/\D/g, '').slice(0, 5))}
-                inputProps={{ inputMode: 'numeric', pattern: '[0-9]*', maxLength: 5 }}
+                onChange={(e) => updateSearchForm('hospitalPincode', e.target.value.replace(/\D/g, '').slice(0, 6))}
+                inputProps={{ inputMode: 'numeric', pattern: '[0-9]*', maxLength: 6 }}
               />
             </Box>
 
@@ -634,8 +634,8 @@ export default function App() {
                 <TextField
                   label="Pincode"
                   value={donorForm.pincode}
-                  onChange={(e) => updateDonorSearchForm('pincode', e.target.value.replace(/\D/g, '').slice(0, 5))}
-                  inputProps={{ inputMode: 'numeric', pattern: '[0-9]*', maxLength: 5 }}
+                  onChange={(e) => updateDonorSearchForm('pincode', e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  inputProps={{ inputMode: 'numeric', pattern: '[0-9]*', maxLength: 6 }}
                 />
               </Box>
               <Box className="action-row">
