@@ -4,7 +4,6 @@ import com.hemo.backend.dto.DonorSearchResponseDTO;
 import com.hemo.backend.dto.DonorSearchSummaryDTO;
 import com.hemo.backend.service.DonorSearchService;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -13,7 +12,6 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/donors")
 @RequiredArgsConstructor
-@Slf4j
 public class DonorSearchController {
     private final DonorSearchService donorSearchService;
 
@@ -23,10 +21,8 @@ public class DonorSearchController {
             @RequestParam(required = false) String pincode,
             @RequestParam(defaultValue = "0") int offset,
             @RequestParam(defaultValue = "20") int limit) {
-        log.info("api.enter donors.search bloodGroup={} pincode={} offset={} limit={}", bloodGroup, pincode, offset, limit);
         DonorSearchResponseDTO response = donorSearchService.searchCompatibleDonors(bloodGroup, pincode, offset, limit);
         DonorSearchSummaryDTO summary = donorSearchService.toSummaryDTO(response);
-        log.info("api.exit donors.search matched={}", summary.getTotalMatched());
         return summary;
     }
 }

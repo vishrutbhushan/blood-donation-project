@@ -230,7 +230,6 @@ public class ElasticsearchLoader {
                 .retrieve()
                 .toBodilessEntity();
         } catch (HttpClientErrorException.NotFound ignored) {
-            log.debug("Skipping bank inventory cleanup because {} does not exist yet", Constants.ELASTIC_INDEX_BANKS);
         }
     }
 

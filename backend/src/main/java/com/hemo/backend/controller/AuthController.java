@@ -19,11 +19,9 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
-import lombok.extern.slf4j.Slf4j;
 
 @RestController
 @RequestMapping("/auth")
-@Slf4j
 public class AuthController {
 
     private static final int OTP_TTL_MINUTES = 5;
@@ -38,7 +36,6 @@ public class AuthController {
 
     @PostMapping("/send-otp")
     public OtpSendResponseDTO sendOtp(@Valid @RequestBody OtpSendRequestDTO dto) {
-        log.info("api.enter auth.send-otp abhaId={}", dto.getAbhaId());
         String otp = generateOtp();
         LocalDateTime expiresAt = LocalDateTime.now().plusMinutes(OTP_TTL_MINUTES);
         otpStore.put(dto.getAbhaId(), new OtpRecord(otp, expiresAt));
@@ -47,13 +44,11 @@ public class AuthController {
 
         AuthProfileDTO profile = requestorProfile();
         OtpSendResponseDTO response = new OtpSendResponseDTO(true, dto.getAbhaId(), profile.getName(), profile.getPhone());
-        log.info("api.exit auth.send-otp sent={}", response.isSent());
         return response;
     }
 
     @PostMapping("/verify-otp")
     public OtpVerifyResponseDTO verifyOtp(@Valid @RequestBody OtpVerifyRequestDTO dto) {
-        log.info("api.enter auth.verify-otp abhaId={}", dto.getAbhaId());
         OtpRecord record = otpStore.get(dto.getAbhaId());
         if (record == null || record.expiresAt().isBefore(LocalDateTime.now())) {
             otpStore.remove(dto.getAbhaId());
@@ -67,7 +62,6 @@ public class AuthController {
 
         AuthProfileDTO profile = requestorProfile();
         OtpVerifyResponseDTO response = new OtpVerifyResponseDTO(true, dto.getAbhaId(), profile.getName(), profile.getPhone());
-        log.info("api.exit auth.verify-otp verified={}", response.isVerified());
         return response;
     }
 
@@ -85,7 +79,6 @@ public class AuthController {
                 "HEMO-CONNECT OTP: " + otp + "\nValid for " + OTP_TTL_MINUTES + " minutes."
             ).create();
         } catch (Exception ex) {
-            log.error("auth.send-otp.whatsapp-failed receiver={} reason={}", fixedOtpReceiverPhone, ex.getMessage());
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "OTP delivery failed");
         }
     }
