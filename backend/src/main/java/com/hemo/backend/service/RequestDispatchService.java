@@ -105,7 +105,7 @@ public class RequestDispatchService {
         Message.creator(
             new PhoneNumber("whatsapp:+91" + donorPhone),
             new PhoneNumber("whatsapp:" + twilioWhatsappNumber),
-            "Urgent blood " + bloodGroup + " required at hospital " + safeHospitalName + " " + safePincode + ". " +
+            "" + bloodGroup + " Blood required at Hospital " + safeHospitalName + "," + safePincode + "." +
             "Reply YES to share contact details"
         ).create();
 
