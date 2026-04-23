@@ -26,11 +26,9 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 import jakarta.annotation.PreDestroy;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 @Service
-@Slf4j
 public class EtlPipelineService {
     private final PincodeGeoMap pincodeGeoMap;
     private final ClickhouseLoader clickhouseLoader;
@@ -68,14 +66,11 @@ public class EtlPipelineService {
     }
 
     public synchronized String startInitialBulkLoad() {
-        log.info("api.enter etl.pipeline.bulk-start");
         initializeIfNeeded();
         if (bulkLoadDone) {
-            log.info("api.exit etl.pipeline.bulk-start result=bulk load already completed");
             return "bulk load already completed";
         }
         if (bulkLoadRunning) {
-            log.info("api.exit etl.pipeline.bulk-start result=bulk load already running");
             return "bulk load already running";
         }
 
@@ -91,15 +86,12 @@ public class EtlPipelineService {
         }, "etl-bulk-load");
         worker.setDaemon(true);
         worker.start();
-        log.info("api.exit etl.pipeline.bulk-start result=bulk load started");
         return "bulk load started";
     }
 
     public synchronized void runElasticIncremental() {
-        log.info("api.enter etl.pipeline.es-incremental");
         initializeIfNeeded();
         if (!bulkLoadDone || bulkLoadRunning) {
-            log.info("api.exit etl.pipeline.es-incremental skipped bulkDone={} bulkRunning={}", bulkLoadDone, bulkLoadRunning);
             return;
         }
 
@@ -118,21 +110,17 @@ public class EtlPipelineService {
             stateStore.setEsLastSyncTs(sourceHandler.sourceName(), now);
         }
         stateStore.save();
-        log.info("api.exit etl.pipeline.es-incremental durationMs={}", System.currentTimeMillis() - startedAt);
     }
 
     public synchronized void runClickhouseDailyIncremental() {
-        log.info("api.enter etl.pipeline.ch-incremental");
         initializeIfNeeded();
         if (!bulkLoadDone || bulkLoadRunning) {
-            log.info("api.exit etl.pipeline.ch-incremental skipped bulkDone={} bulkRunning={}", bulkLoadDone, bulkLoadRunning);
             return;
         }
 
         LocalDate day = LocalDate.now(ZoneId.of(Constants.ETL_ZONE)).minusDays(1);
         long startedAt = System.currentTimeMillis();
         processClickhouseDay(day, "incremental-ch");
-        log.info("api.exit etl.pipeline.ch-incremental day={} durationMs={}", day, System.currentTimeMillis() - startedAt);
     }
 
     @PreDestroy
@@ -186,7 +174,6 @@ public class EtlPipelineService {
         stateStore.setBulkDone(true);
         stateStore.save();
         bulkLoadDone = true;
-        log.info("api.exit etl.pipeline.bulk-load durationMs={}", System.currentTimeMillis() - startedAt);
     }
 
     private int processClickhouseDay(LocalDate day, String batchType) {
@@ -203,7 +190,6 @@ public class EtlPipelineService {
         List<InventoryTransaction> transactions = accumulator.collectPendingInventoryTransactions();
         int totalRead = banks.size() + donors.size() + transactions.size();
         if (totalRead == 0) {
-            log.info("api.exit etl.pipeline.processClickhouseDay day={} batchType={} durationMs={} banks=0 donors=0 inventoryTransactions=0", day, batchType, System.currentTimeMillis() - startedAt);
             return 0;
         }
 
@@ -219,7 +205,6 @@ public class EtlPipelineService {
         long endedAt = System.currentTimeMillis();
         recordAuditRows(batchType, "clickhouse", startedAt, endedAt, banks, donors, transactions, transactions.size());
         accumulator.clearPendingInventoryTransactions();
-        log.info("api.exit etl.pipeline.processClickhouseDay day={} batchType={} durationMs={} banks={} donors={} inventoryTransactions={}", day, batchType, endedAt - startedAt, banks.size(), donors.size(), transactions.size());
         return totalRead;
     }
 
@@ -231,7 +216,6 @@ public class EtlPipelineService {
         List<InventoryTransaction> transactions = accumulator.collectPendingInventoryTransactions();
         int totalRead = banks.size() + donors.size() + transactions.size();
         if (totalRead == 0) {
-            log.info("api.exit etl.pipeline.processClickhouseMonth month={} batchType={} durationMs={} banks=0 donors=0 inventoryTransactions=0", month, batchType, System.currentTimeMillis() - startedAt);
             return 0;
         }
 
@@ -264,7 +248,6 @@ public class EtlPipelineService {
         long endedAt = System.currentTimeMillis();
         recordAuditRows(batchType, "clickhouse", startedAt, endedAt, banks, donors, transactions, transactions.size());
         accumulator.clearPendingInventoryTransactions();
-        log.info("api.exit etl.pipeline.processClickhouseMonth month={} batchType={} durationMs={} banks={} donors={} inventoryTransactions={}", month, batchType, endedAt - startedAt, banks.size(), donors.size(), transactions.size());
         return totalRead;
     }
 
@@ -282,7 +265,6 @@ public class EtlPipelineService {
         long endedAt = System.currentTimeMillis();
         recordAuditRows(batchType, "elasticsearch", startedAt, endedAt, banks, donors, pendingTransactions, currentInventoryState.size());
         batchAccumulator.clearPendingInventoryTransactions();
-        log.info("api.exit etl.pipeline.flushElasticsearch batchType={} durationMs={} banks={} donors={} currentInventoryState={} pendingTransactions={}", batchType, endedAt - startedAt, banks.size(), donors.size(), currentInventoryState.size(), pendingTransactions.size());
     }
 
     private void mergeBatches(List<SourceResult> sourceResults, EtlBatchAccumulator target) {
@@ -295,18 +277,7 @@ public class EtlPipelineService {
         List<CompletableFuture<SourceResult>> futures = new ArrayList<>();
         for (SourceHandler sourceHandler : sourceHandlers) {
             futures.add(CompletableFuture.supplyAsync(() -> {
-                long startedAt = System.currentTimeMillis();
-                log.info("api.enter etl.pipeline.source phase={} source={}", phase, sourceHandler.sourceName());
                 EtlBatch batch = work.apply(sourceHandler);
-                log.info(
-                    "api.exit etl.pipeline.source phase={} source={} durationMs={} banks={} donors={} inventoryTransactions={}",
-                    phase,
-                    sourceHandler.sourceName(),
-                    System.currentTimeMillis() - startedAt,
-                    batch.getBanks().size(),
-                    batch.getDonors().size(),
-                    batch.getInventoryTransactions().size()
-                );
                 return new SourceResult(sourceHandler.sourceName(), batch);
             }, pipelineExecutor));
         }

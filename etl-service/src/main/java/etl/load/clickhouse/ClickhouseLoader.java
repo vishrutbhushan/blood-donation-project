@@ -16,8 +16,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -26,7 +24,6 @@ import static etl.util.ClickhouseUtil.*;
 
 @Component
 public class ClickhouseLoader {
-    private static final Logger log = LoggerFactory.getLogger(ClickhouseLoader.class);
     private static final int BULK_INSERT_BATCH_SIZE = 500;
     private final RestClient clickhouse;
 
@@ -39,9 +36,7 @@ public class ClickhouseLoader {
     }
 
     public void loadBanks(List<BloodBank> banks) {
-        log.info("api.enter ClickhouseLoader.loadBanks");
         if (banks == null || banks.isEmpty()) {
-            log.info("api.exit ClickhouseLoader.loadBanks");
             return;
         }
 
@@ -77,13 +72,10 @@ public class ClickhouseLoader {
         flushInsertValues("INSERT INTO blood_ops.source_ingestion_hourly_agg "
                 + "(event_hour, source, api_name, record_type, record_count) VALUES ", counterRows);
 
-        log.info("api.exit ClickhouseLoader.loadBanks");
     }
 
     public void loadDonors(List<Donor> donors) {
-        log.info("api.enter ClickhouseLoader.loadDonors");
         if (donors == null || donors.isEmpty()) {
-            log.info("api.exit ClickhouseLoader.loadDonors");
             return;
         }
 
@@ -138,15 +130,12 @@ public class ClickhouseLoader {
         flushInsertValues("INSERT INTO blood_ops.source_ingestion_hourly_agg "
                 + "(event_hour, source, api_name, record_type, record_count) VALUES ", counterRows);
 
-        log.info("api.exit ClickhouseLoader.loadDonors");
     }
 
     public void loadInventoryDay(LocalDate businessDate, List<InventoryTransaction> transactions) {
-        log.info("api.enter ClickhouseLoader.loadInventoryDay");
         String day = businessDate.toString();
 
         if (transactions == null || transactions.isEmpty()) {
-            log.info("api.exit ClickhouseLoader.loadInventoryDay");
             return;
         }
 
@@ -214,11 +203,9 @@ public class ClickhouseLoader {
                 + "(event_date, source_id, source_system, bank_id, blood_group, component, opening_balance_units, inflow_units, outflow_units, "
                 + "closing_balance_units, donation_events_count, withdrawal_events_count, version) VALUES ", factRows);
 
-        log.info("api.exit ClickhouseLoader.loadInventoryDay");
     }
 
     public void aggregateDonorDay(LocalDate businessDate) {
-        log.info("api.enter ClickhouseLoader.aggregateDonorDay");
         String day = businessDate.toString();
         long version = System.currentTimeMillis();
 
@@ -238,7 +225,6 @@ public class ClickhouseLoader {
                 + "AND is_deleted = 0 "
                 + "GROUP BY source_id, source_system, bank_id, blood_group_id");
 
-        log.info("api.exit ClickhouseLoader.aggregateDonorDay");
     }
 
     public void recordLoadAudit(
@@ -251,7 +237,6 @@ public class ClickhouseLoader {
             long rowsWritten,
             String status,
             String message) {
-        log.info("api.enter ClickhouseLoader.recordLoadAudit");
         sql("INSERT INTO blood_ops.meta_load_audit "
                 + "(batch_id, source_system, target_dataset, started_at, ended_at, rows_read, rows_written, status, message) VALUES ("
                 + ClickhouseText.quote(batchId) + ","
@@ -263,8 +248,6 @@ public class ClickhouseLoader {
                 + rowsWritten + ","
                 + ClickhouseText.quote(status) + ","
                 + ClickhouseText.quote(message) + ")");
-
-        log.info("api.exit ClickhouseLoader.recordLoadAudit");
     }
 
     private void sql(String query) {

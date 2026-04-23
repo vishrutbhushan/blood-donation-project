@@ -3,6 +3,10 @@ package com.hemo.backend.service;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.hemo.backend.dto.BloodBankDTO;
+import static com.hemo.backend.util.JsonStringUtil.emptyToBlank;
+import static com.hemo.backend.util.JsonStringUtil.emptyToDefault;
+import static com.hemo.backend.util.JsonStringUtil.escapeJson;
+import static com.hemo.backend.util.JsonStringUtil.joinQuotedJsonValues;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -96,18 +100,6 @@ public class BloodBankService {
         return String.format(Locale.US, SEARCH_QUERY_TEMPLATE, FETCH_SIZE, String.join(",\n                    ", filters), userLatitude, userLongitude);
     }
 
-    private String joinQuotedJsonValues(List<String> values) {
-        List<String> quoted = new ArrayList<>();
-        for (String value : values) {
-            quoted.add("\"" + escapeJson(value) + "\"");
-        }
-        return String.join(", ", quoted);
-    }
-
-    private String escapeJson(String value) {
-        return value == null ? "" : value.replace("\\", "\\\\").replace("\"", "\\\"");
-    }
-
     private List<BloodBankDTO> toDtos(EsSearchResponse response) {
         Map<String, BloodBankDTO> banks = new LinkedHashMap<>();
         if (response == null || response.getHits() == null || response.getHits().getHits() == null) {
@@ -153,17 +145,6 @@ public class BloodBankService {
         }
 
         return new ArrayList<>(banks.values()).subList(0, Math.min(MAX_RESULTS, banks.size()));
-    }
-
-    private String emptyToBlank(String value) {
-        return value == null ? "" : value;
-    }
-
-    private String emptyToDefault(String value, String defaultValue) {
-        if (value == null || value.isBlank()) {
-            return defaultValue;
-        }
-        return value;
     }
 
     @Data

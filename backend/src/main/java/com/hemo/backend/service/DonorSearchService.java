@@ -16,6 +16,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Set;
 import java.util.stream.Collectors;
+import static com.hemo.backend.util.JsonStringUtil.escapeJson;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
@@ -190,7 +191,7 @@ public class DonorSearchService {
 
     private String buildElasticsearchQuery(List<String> compatibleGroups, PincodeGeoService.GeoPoint geoPoint, int offset, int limit) {
         String terms = compatibleGroups.stream()
-                .map(v -> "\"" + escape(v) + "\"")
+            .map(v -> "\"" + escapeJson(v) + "\"")
                 .collect(Collectors.joining(","));
         if (geoPoint != null) {
             return String.format(
@@ -204,10 +205,6 @@ public class DonorSearchService {
             );
         }
         return String.format(Locale.US, QUERY_NO_GEO_TEMPLATE, offset, limit, terms);
-    }
-
-    private String escape(String value) {
-        return value.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 
     private String resolveAbhaId(JsonNode src, String donorId) {

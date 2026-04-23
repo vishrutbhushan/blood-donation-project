@@ -12,8 +12,6 @@ import etl.util.PincodeGeoMap;
 import etl.util.TimeUtil;
 import java.util.HashMap;
 import java.util.List;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import static etl.util.JsonNodeUtil.optional;
@@ -24,7 +22,6 @@ import static etl.util.JsonNodeUtil.truthy;
 
 @Component
 public class WhoTransformPipeline {
-    private static final Logger log = LoggerFactory.getLogger(WhoTransformPipeline.class);
     private static final String BANK_RECORD_KEY = "blood_banks";
     private static final String DONOR_RECORD_KEY = "donors";
     private static final String INVENTORY_TXN_RECORD_KEY = "inventory_transactions";
@@ -73,7 +70,6 @@ public class WhoTransformPipeline {
     }
 
     public EtlBatch run(Object payload, PincodeGeoMap geoMap) {
-        log.info("api.enter WhoTransformPipeline.run");
         EtlBatch out = new EtlBatch();
         JsonNode root = MAPPER.valueToTree(payload);
         for (JsonNode raw : pickRecords(root, BANK_RECORD_KEY)) {
@@ -88,7 +84,6 @@ public class WhoTransformPipeline {
             InventoryTransaction transaction = toInventoryTransaction(raw);
             out.getInventoryTransactions().add(transaction);
         }
-        log.info("api.exit WhoTransformPipeline.run banks={} donors={} inventoryTransactions={}", out.getBanks().size(), out.getDonors().size(), out.getInventoryTransactions().size());
         return out;
     }
 

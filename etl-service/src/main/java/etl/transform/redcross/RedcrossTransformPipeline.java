@@ -12,8 +12,6 @@ import etl.util.PincodeGeoMap;
 import etl.util.TimeUtil;
 import java.util.HashMap;
 import java.util.List;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import static etl.util.JsonNodeUtil.optional;
@@ -24,7 +22,6 @@ import static etl.util.JsonNodeUtil.truthy;
 
 @Component
 public class RedcrossTransformPipeline {
-    private static final Logger log = LoggerFactory.getLogger(RedcrossTransformPipeline.class);
     private static final String BANK_RECORD_KEY = "centres";
     private static final String DONOR_RECORD_KEY = "people";
     private static final String INVENTORY_TXN_RECORD_KEY = "inventory_transactions";
@@ -73,7 +70,6 @@ public class RedcrossTransformPipeline {
     }
 
     public EtlBatch run(Object payload, PincodeGeoMap geoMap) {
-        log.info("api.enter RedcrossTransformPipeline.run");
         EtlBatch out = new EtlBatch();
         JsonNode root = MAPPER.valueToTree(payload);
         for (JsonNode raw : pickRecords(root, BANK_RECORD_KEY)) {
@@ -88,7 +84,6 @@ public class RedcrossTransformPipeline {
             InventoryTransaction transaction = toInventoryTransaction(raw);
             out.getInventoryTransactions().add(transaction);
         }
-        log.info("api.exit RedcrossTransformPipeline.run banks={} donors={} inventoryTransactions={}", out.getBanks().size(), out.getDonors().size(), out.getInventoryTransactions().size());
         return out;
     }
 
